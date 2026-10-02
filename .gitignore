@@ -1,0 +1,31 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+
+# IDE
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+
+# Test results / coverage
+TestResults/
+coverage/
+*.coverage
+*.trx
+
+# Secrets and local config
+appsettings.*.local.json
+*.env
+.env*
+
+# Claude Code local-only settings
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+.DS_Store

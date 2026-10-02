@@ -1,0 +1,26 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{json,yml,yaml,props,csproj,xml}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+
+# Library code: no SynchronizationContext to capture in ASP.NET Core / workers.
+dotnet_diagnostic.CA2007.severity = none
+# Reserved-keyword parameter names only matter for VB consumers (e.g. "to").
+dotnet_diagnostic.CA1716.severity = none
+# Tests and DAOs use underscores / descriptive names freely.
+dotnet_diagnostic.CA1707.severity = none
