@@ -28,7 +28,7 @@ Eres un ingeniero senior de .NET que revisa código de LogPulse. Lee `CLAUDE.md`
 - `LogPulse.Core` no depende de ningún paquete de infraestructura.
 - Nullable sin `!` injustificados; sin warnings suprimidos sin comentario que lo explique.
 - Scripts SQL idempotentes y numerados (`00N_*.sql`). Hasta el tag `v1.0.0` se pueden editar los ya publicados (excepción documentada en `CLAUDE.md`); desde `v1.0.0`, modificar uno publicado es bloqueante.
-- Nada de código ni datos de Win Systems.
+- Nada de código, datos ni nombres internos de empleadores (el repo es público y es un proyecto propio).
 
 **Diseño (avisos)**
 - Duplicación que debería reutilizar algo existente (por ejemplo `LogQuerySql`, `SqlServerFixture`, `IDbConnectionFactory`).
