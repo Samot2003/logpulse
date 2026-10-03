@@ -11,6 +11,9 @@
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(dotnet list:*)",
+      "Bash(docker info:*)",
       "PowerShell(dotnet build:*)",
       "PowerShell(dotnet test:*)",
       "PowerShell(dotnet format:*)",
@@ -20,13 +23,18 @@
       "PowerShell(docker compose:*)",
       "PowerShell(git status:*)",
       "PowerShell(git diff:*)",
-      "PowerShell(git log:*)"
+      "PowerShell(git log:*)",
+      "PowerShell(git show:*)",
+      "PowerShell(dotnet list:*)",
+      "PowerShell(docker info:*)"
     ],
     "ask": [
       "Bash(git push:*)",
       "Bash(docker push:*)",
+      "Bash(docker compose down -v:*)",
       "PowerShell(git push:*)",
-      "PowerShell(docker push:*)"
+      "PowerShell(docker push:*)",
+      "PowerShell(docker compose down -v:*)"
     ]
   },
   "hooks": {
