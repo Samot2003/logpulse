@@ -13,11 +13,13 @@ Responder siempre en español. README, código, comentarios y commits en inglés
 - `src/LogPulse.Dashboard`: Blazor + SignalR.
 - `tests/LogPulse.Tests`: xUnit (+ Testcontainers para SQL Server).
 
-## Comandos (los mismos que usa el CI)
+## Comandos (los mismos que usa el CI en `.github/workflows/ci.yml`)
+- Restaurar (como el CI, falla si cambian los `packages.lock.json`): `dotnet restore LogPulse.sln --locked-mode`. Si añades o actualizas un paquete, haz `dotnet restore` normal y versiona los lock files.
 - Compilar: `dotnet build LogPulse.sln --nologo`
 - Tests unitarios: `dotnet test LogPulse.sln --nologo --filter "Category!=Integration"`
 - Tests de integración (necesitan Docker): `dotnet test LogPulse.sln --nologo --filter "Category=Integration"`
 - Formato: `dotnet format LogPulse.sln --verify-no-changes`
+- Paquetes vulnerables: `dotnet list LogPulse.sln package --vulnerable --include-transitive` (no debe listar ninguno)
 - Entorno completo: `docker compose up --build`
 
 ## Convenciones

@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: CI only needs to read the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch or PR cancels the run that is still in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+# Every job runs the same commands as the "Comandos" section of CLAUDE.md,
+# so the local Claude Code harness and CI check exactly the same things.
+jobs:
+  build:
+    name: Build and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore (locked)
+        run: dotnet restore LogPulse.sln --locked-mode
+
+      - name: Check formatting
+        run: dotnet format LogPulse.sln --verify-no-changes --no-restore
+
+      # Warnings are errors via Directory.Build.props, exactly as in local builds.
+      - name: Build
+        run: dotnet build LogPulse.sln --nologo --no-restore
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore (locked)
+        run: dotnet restore LogPulse.sln --locked-mode
+
+      - name: Run unit tests
+        run: >-
+          dotnet test LogPulse.sln --nologo --no-restore
+          --filter "Category!=Integration"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults/unit
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: TestResults/unit/**/coverage.cobertura.xml
+          if-no-files-found: error
+
+  integration-tests:
+    name: Integration tests (SQL Server via Testcontainers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore (locked)
+        run: dotnet restore LogPulse.sln --locked-mode
+
+      # ubuntu-latest ships with Docker, which Testcontainers uses to start SQL Server 2022.
+      - name: Run integration tests
+        run: >-
+          dotnet test LogPulse.sln --nologo --no-restore
+          --filter "Category=Integration"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults/integration
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration
+          path: TestResults/integration/**/coverage.cobertura.xml
+          if-no-files-found: error
+
+  coverage:
+    name: Coverage report
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage
+
+      - name: Merge coverage reports
+        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        with:
+          reports: coverage/**/coverage.cobertura.xml
+          targetdir: coverage-report
+          reporttypes: MarkdownSummaryGithub;Cobertura
+
+      - name: Publish summary
+        run: cat coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report
+
+  security:
+    name: Vulnerable packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Restore (locked)
+        run: dotnet restore LogPulse.sln --locked-mode
+
+      # "dotnet list package --vulnerable" always exits 0, so the JSON report is checked explicitly.
+      # With --vulnerable, every package listed under a framework is a vulnerable one.
+      # Problems (e.g. the vulnerability feed could not be read) also fail, so the job never passes blind.
+      - name: Check direct and transitive packages
+        run: |
+          dotnet list LogPulse.sln package --vulnerable --include-transitive --format json > vulnerable.json
+          cat vulnerable.json
+          vulnerable=$(jq '[.projects[].frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length' vulnerable.json)
+          problems=$(jq '[.problems[]?] | length' vulnerable.json)
+          if [ "$vulnerable" -gt 0 ] || [ "$problems" -gt 0 ]; then
+            echo "::error::$vulnerable vulnerable NuGet package(s), $problems problem(s). See the report above."
+            exit 1
+          fi
