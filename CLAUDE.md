@@ -26,15 +26,18 @@ Responder siempre en español. README, código, comentarios y commits en inglés
 - Scripts SQL en `src/LogPulse.Data/Schema/` numerados (`00N_*.sql`) e idempotentes. **Excepción hasta `v1.0.0`:** como no hay ninguna base de datos desplegada (solo contenedores de test), se pueden editar los scripts ya publicados. Desde `v1.0.0`, cualquier cambio va en un script nuevo.
 - Secretos fuera del repo (user-secrets / variables de entorno / GitHub Secrets).
 - Hooks de `.claude/settings.json`: formatean los `.cs` editados y ejecutan los tests unitarios antes de terminar una tarea.
-- Pedir confirmación antes de `git push`, `docker push` o cualquier despliegue.
+- **Git:** nunca hacer `git commit`, `git merge` ni `git push` sin permiso explícito del usuario para esa acción concreta. Tampoco `docker push` ni despliegues.
+- **Una rama por hito:** `hito/hN-nombre` (por ejemplo `hito/h3-ci`), creada desde `main` actualizado. Nunca se trabaja directamente en `main`.
 
 ## Flujo de trabajo por hito
 Los hitos, sus criterios de aceptación y los agentes que los verifican están en `docs/ROADMAP.md`.
-1. Implementar las casillas del hito. Los hooks formatean y ejecutan los tests unitarios automáticamente.
-2. Ejecutar los tests de integración si el hito toca datos o la API.
-3. Lanzar `/verificar N`: ejecuta en paralelo los agentes del hito y consolida sus veredictos.
-4. Corregir los bloqueantes y repetir `/verificar N` hasta que no quede ningún `FALLA`.
-5. Marcar el hito en el roadmap y hacer commit.
+1. Crear la rama del hito: `git switch main`, `git pull`, `git switch -c hito/hN-nombre`.
+2. Implementar las casillas del hito. Los hooks formatean y ejecutan los tests unitarios automáticamente.
+3. Ejecutar los tests de integración si el hito toca datos o la API.
+4. Lanzar `/verificar N`: ejecuta en paralelo los agentes del hito y consolida sus veredictos.
+5. Corregir los bloqueantes y repetir `/verificar N` hasta que no quede ningún `FALLA`.
+6. Marcar el hito en el roadmap, enseñar al usuario el diff y el mensaje de commit propuesto y **esperar su permiso** antes de hacer commit.
+7. Con permiso: push de la rama y PR a `main`. Desde H3, el merge se hace con el CI en verde y también con permiso del usuario.
 
 ## Agentes verificadores (`.claude/agents/`)
 Solo verifican e informan; nunca modifican archivos. Todos responden con `VEREDICTO: OK | AVISOS | FALLA` y hallazgos con `archivo:línea`.

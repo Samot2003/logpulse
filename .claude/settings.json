@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(dotnet restore:*)",
       "Bash(dotnet build:*)",
       "Bash(dotnet test:*)",
       "Bash(dotnet format:*)",
@@ -14,6 +15,7 @@
       "Bash(git show:*)",
       "Bash(dotnet list:*)",
       "Bash(docker info:*)",
+      "PowerShell(dotnet restore:*)",
       "PowerShell(dotnet build:*)",
       "PowerShell(dotnet test:*)",
       "PowerShell(dotnet format:*)",
@@ -29,10 +31,18 @@
       "PowerShell(docker info:*)"
     ],
     "ask": [
+      "Bash(git commit:*)",
+      "Bash(git merge:*)",
       "Bash(git push:*)",
+      "Bash(git reset:*)",
+      "Bash(git rebase:*)",
       "Bash(docker push:*)",
       "Bash(docker compose down -v:*)",
+      "PowerShell(git commit:*)",
+      "PowerShell(git merge:*)",
       "PowerShell(git push:*)",
+      "PowerShell(git reset:*)",
+      "PowerShell(git rebase:*)",
       "PowerShell(docker push:*)",
       "PowerShell(docker compose down -v:*)"
     ]
