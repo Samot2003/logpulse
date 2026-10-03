@@ -46,12 +46,15 @@ public sealed class SqlMetricDao(IDbConnectionFactory connectionFactory) : IMetr
 
     public async Task<IReadOnlyList<MetricSample>> GetLatestPerServerAsync(CancellationToken cancellationToken = default)
     {
+        // One index seek per server instead of ranking the whole history table.
         var sql = $"""
-            SELECT {Columns}
-              FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY ServerId ORDER BY Timestamp DESC, Id DESC) AS rn
-                      FROM dbo.MetricSamples) latest
-             WHERE rn = 1
-             ORDER BY ServerId
+            SELECT latest.*
+              FROM dbo.Servers s
+             CROSS APPLY (SELECT TOP (1) {Columns}
+                            FROM dbo.MetricSamples m
+                           WHERE m.ServerId = s.Id
+                           ORDER BY m.Timestamp DESC, m.Id DESC) latest
+             ORDER BY latest.ServerId
             """;
 
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);

@@ -25,6 +25,24 @@ public class LogQueryTests
         Assert.Equal(expected, new LogQuery { Search = search }.Normalized().Search);
     }
 
+    [Fact]
+    public void Normalized_never_shortens_a_long_search()
+    {
+        var search = new string('x', 1_000);
+
+        Assert.Equal(search, new LogQuery { Search = search }.Normalized().Search);
+    }
+
+    [Theory]
+    [InlineData(1, 50, 0L)]
+    [InlineData(3, 25, 50L)]
+    [InlineData(0, 0, 0L)]
+    [InlineData(int.MaxValue, LogQuery.MaxPageSize, (int.MaxValue - 1L) * LogQuery.MaxPageSize)]
+    public void Offset_is_computed_in_long_without_overflow(int page, int pageSize, long expected)
+    {
+        Assert.Equal(expected, new LogQuery { Page = page, PageSize = pageSize }.Offset);
+    }
+
     [Theory]
     [InlineData(0, 50, 0)]
     [InlineData(1, 50, 1)]

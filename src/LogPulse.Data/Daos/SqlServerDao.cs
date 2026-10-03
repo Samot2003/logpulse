@@ -12,11 +12,12 @@ public sealed class SqlServerDao(IDbConnectionFactory connectionFactory) : IServ
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         // UPDLOCK + HOLDLOCK serializes concurrent first registrations of the same name.
+        // LastSeenAt only moves forward, so late or replayed batches cannot make a server look stale.
         const string sql = $"""
             SET XACT_ABORT ON;
             BEGIN TRAN;
             UPDATE dbo.Servers WITH (UPDLOCK, HOLDLOCK)
-               SET LastSeenAt = @SeenAt
+               SET LastSeenAt = CASE WHEN @SeenAt > LastSeenAt THEN @SeenAt ELSE LastSeenAt END
              WHERE Name = @Name;
             IF @@ROWCOUNT = 0
                 INSERT INTO dbo.Servers (Name, RegisteredAt, LastSeenAt) VALUES (@Name, @SeenAt, @SeenAt);

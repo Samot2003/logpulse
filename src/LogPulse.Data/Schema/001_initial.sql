@@ -25,10 +25,18 @@ BEGIN
         Exception NVARCHAR(MAX)        NULL
     );
 
-    -- Log viewer: newest first, optionally per server and severity.
-    CREATE INDEX IX_LogEntries_Server_Timestamp ON dbo.LogEntries (ServerId, Timestamp DESC) INCLUDE (Severity);
-    CREATE INDEX IX_LogEntries_Timestamp ON dbo.LogEntries (Timestamp DESC) INCLUDE (Severity, ServerId);
 END;
+
+-- Indexes are guarded one by one so a startup interrupted after CREATE TABLE still gets them.
+-- Keys end in Id DESC to match ORDER BY Timestamp DESC, Id DESC without a sort.
+
+-- Log viewer: newest first, optionally per server and severity.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_LogEntries_Server_Timestamp' AND object_id = OBJECT_ID(N'dbo.LogEntries'))
+    CREATE INDEX IX_LogEntries_Server_Timestamp ON dbo.LogEntries (ServerId, Timestamp DESC, Id DESC) INCLUDE (Severity);
+
+-- Log viewer across all servers, and retention purges by Timestamp.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_LogEntries_Timestamp' AND object_id = OBJECT_ID(N'dbo.LogEntries'))
+    CREATE INDEX IX_LogEntries_Timestamp ON dbo.LogEntries (Timestamp DESC, Id DESC) INCLUDE (Severity, ServerId);
 
 IF OBJECT_ID(N'dbo.MetricSamples', N'U') IS NULL
 BEGIN
@@ -42,6 +50,12 @@ BEGIN
         MemoryTotalMb   BIGINT               NOT NULL,
         DiskUsedPercent FLOAT                NOT NULL
     );
-
-    CREATE INDEX IX_MetricSamples_Server_Timestamp ON dbo.MetricSamples (ServerId, Timestamp DESC);
 END;
+
+-- Charts per server and the latest sample per server (TOP 1 seek).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_MetricSamples_Server_Timestamp' AND object_id = OBJECT_ID(N'dbo.MetricSamples'))
+    CREATE INDEX IX_MetricSamples_Server_Timestamp ON dbo.MetricSamples (ServerId, Timestamp DESC, Id DESC);
+
+-- Retention purges by Timestamp.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_MetricSamples_Timestamp' AND object_id = OBJECT_ID(N'dbo.MetricSamples'))
+    CREATE INDEX IX_MetricSamples_Timestamp ON dbo.MetricSamples (Timestamp);

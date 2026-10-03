@@ -9,6 +9,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
     private readonly MsSqlContainer _container =
         new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest").Build();
 
+    // Assigned in InitializeAsync, which xUnit always runs before any test in the collection.
     public IDbConnectionFactory ConnectionFactory { get; private set; } = null!;
 
     public async Task InitializeAsync()

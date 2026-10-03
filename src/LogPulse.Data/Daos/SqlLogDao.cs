@@ -33,7 +33,7 @@ public sealed class SqlLogDao(IDbConnectionFactory connectionFactory) : ILogDao
         query = query.Normalized();
 
         var (where, parameters) = LogQuerySql.BuildWhere(query);
-        parameters.Add("Offset", (query.Page - 1) * query.PageSize);
+        parameters.Add("Offset", query.Offset);
         parameters.Add("PageSize", query.PageSize);
 
         var sql = $"""
