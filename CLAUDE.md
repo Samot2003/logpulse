@@ -1,6 +1,6 @@
 # LogPulse
 
-Mini ServerHealth open source en C#/.NET 8: un agente recoge métricas y logs, una API ASP.NET Core los almacena en SQL Server y un dashboard los muestra en tiempo real. Es un proyecto de portfolio; no incluir código ni datos de Win Systems.
+Plataforma de monitorización de servidores open source en C#/.NET 8: un agente recoge métricas y logs, una API ASP.NET Core los almacena en SQL Server y un dashboard los muestra en tiempo real. Es un proyecto de portfolio propio: no incluir código, datos ni nombres internos de empleadores.
 
 ## Idioma
 Responder siempre en español. README, código, comentarios y commits en inglés. Harness (`CLAUDE.md`, `.claude/agents`, `.claude/skills`) y `docs/ROADMAP.md` en español.

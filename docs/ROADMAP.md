@@ -53,9 +53,16 @@ Se aplica a todos los hitos, además de sus criterios propios:
   - [x] Job `security`: `dotnet list package --vulnerable --include-transitive` falla si encuentra vulnerabilidades.
 - [x] `.github/dependabot.yml` (nuget + github-actions, semanal, agrupado).
 - [x] README mínimo con el badge de CI (se amplía en H9).
-- [ ] Protección de la rama `main` exigiendo CI.
+- [x] Primer run en verde: PR #1 y push a `main` (`b38e188`), confirmado por el usuario en la pestaña Actions.
+- [x] Dependabot funcionando: abrió su primer PR (actualización del grupo de GitHub Actions).
+- [x] Revisión del historial antes de publicar: sin secretos; menciones a empleadores neutralizadas; email noreply de GitHub para los commits nuevos.
+- [ ] Repo público (usuario: Settings → General → Change visibility).
+- [ ] Badge visible en el README (requiere repo público).
+- [ ] Protección de la rama `main` exigiendo los checks del CI (requiere repo público en el plan gratuito).
 
 **Aceptación:** run verde en GitHub y badge funcionando.
+
+**Verificación (`/verificar h3`):** qa-tester OK, devops-verifier AVISOS (CI remoto no verificable desde local con el repo privado; el usuario confirmó el run en verde).
 
 ## [ ] H4 — API ASP.NET Core
 **Agentes:** qa-tester, code-reviewer, security-auditor, api-tester
