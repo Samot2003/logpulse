@@ -27,6 +27,7 @@ Verifica el hito indicado en `$ARGUMENTS` (por ejemplo `/verificar 4`). Sin argu
    - Si todo es `OK` o `AVISOS`: el hito puede cerrarse. Marca `[x]` en las casillas cumplidas y en el título del hito en `docs/ROADMAP.md`, y enumera los avisos que quedan pendientes.
 
 ## Reglas
+- Esta skill **nunca hace commit, merge ni push**. Marcar casillas en el roadmap no es un commit; el commit lo autoriza el usuario después.
 - Esta skill **no corrige código**. Las correcciones las hace el agente principal después, en otro paso, y luego se vuelve a lanzar `/verificar`.
 - Nunca inventes resultados de un agente: si uno falla o no termina, repórtalo como "sin veredicto" y trátalo como `FALLA`.
 - Responde en español.

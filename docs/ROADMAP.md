@@ -8,7 +8,7 @@ Se aplica a todos los hitos, además de sus criterios propios:
 - Tests unitarios y de integración en verde.
 - `dotnet format LogPulse.sln --verify-no-changes` limpio.
 - `/verificar N` sin `FALLA`.
-- Commits en inglés.
+- Trabajo en la rama `hito/hN-nombre`; commits en inglés y solo con permiso explícito del usuario.
 - A partir de H3: CI en verde en GitHub.
 
 ---
@@ -43,13 +43,16 @@ Se aplica a todos los hitos, además de sus criterios propios:
 ## [ ] H3 — CI en GitHub Actions
 **Agentes:** devops-verifier, qa-tester
 - [x] Repo creado y primer push (lo hizo el usuario como `Samot2003/Proyecto-c-`).
-- [ ] Renombrar el repo a `logpulse` en GitHub (usuario) y actualizar el remoto con `git remote set-url`.
-- [ ] `.github/workflows/ci.yml` en push y PR a `main`, con `concurrency` que cancela los runs antiguos.
-  - [ ] Job `build`: `setup-dotnet` con `global-json-file`, caché NuGet, `dotnet format --verify-no-changes`, `dotnet build -warnaserror`.
-  - [ ] Job `unit-tests`.
-  - [ ] Job `integration-tests` (Testcontainers en `ubuntu-latest`), con cobertura en el job summary.
-  - [ ] Job `security`: `dotnet list package --vulnerable --include-transitive` falla si encuentra vulnerabilidades.
-- [ ] `.github/dependabot.yml` (nuget + github-actions, semanal).
+- [x] Renombrar el repo a `logpulse` en GitHub (usuario) y actualizar el remoto con `git remote set-url`.
+- [x] Lock files de NuGet (`packages.lock.json`) y restauración en `--locked-mode` en el CI.
+- [x] `.github/workflows/ci.yml` en push y PR a `main`, con `concurrency` que cancela los runs antiguos.
+  - [x] Job `build`: `setup-dotnet` con `global-json-file`, caché NuGet, `dotnet format --verify-no-changes`, `dotnet build` (warnings como errores vía `Directory.Build.props`).
+  - [x] Job `unit-tests`.
+  - [x] Job `integration-tests` (Testcontainers en `ubuntu-latest`).
+  - [x] Job `coverage`: une la cobertura de unitarios e integración con ReportGenerator y la publica en el job summary.
+  - [x] Job `security`: `dotnet list package --vulnerable --include-transitive` falla si encuentra vulnerabilidades.
+- [x] `.github/dependabot.yml` (nuget + github-actions, semanal, agrupado).
+- [x] README mínimo con el badge de CI (se amplía en H9).
 - [ ] Protección de la rama `main` exigiendo CI.
 
 **Aceptación:** run verde en GitHub y badge funcionando.
