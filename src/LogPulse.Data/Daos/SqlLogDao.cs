@@ -6,6 +6,8 @@ namespace LogPulse.Data.Daos;
 
 public sealed class SqlLogDao(IDbConnectionFactory connectionFactory) : ILogDao
 {
+    private static readonly string[] InsertColumns = ["ServerId", "Timestamp", "Severity", "Source", "Message", "Exception"];
+
     public async Task<int> InsertBatchAsync(IReadOnlyCollection<LogEntry> entries, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -14,15 +16,16 @@ public sealed class SqlLogDao(IDbConnectionFactory connectionFactory) : ILogDao
             return 0;
         }
 
-        const string sql = """
-            INSERT INTO dbo.LogEntries (ServerId, Timestamp, Severity, Source, Message, Exception)
-            VALUES (@ServerId, @Timestamp, @Severity, @Source, @Message, @Exception)
-            """;
-
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var inserted = await connection.ExecuteAsync(
-            new CommandDefinition(sql, entries, transaction, cancellationToken: cancellationToken));
+        var inserted = await SqlBatch.InsertAsync(
+            connection,
+            transaction,
+            "dbo.LogEntries",
+            InsertColumns,
+            entries,
+            e => [e.ServerId, e.Timestamp, (byte)e.Severity, e.Source, e.Message, e.Exception],
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return inserted;
     }
@@ -54,10 +57,8 @@ public sealed class SqlLogDao(IDbConnectionFactory connectionFactory) : ILogDao
         return new PagedResult<LogEntry>(items, query.Page, query.PageSize, total);
     }
 
-    public async Task<int> DeleteOlderThanAsync(DateTimeOffset cutoff, CancellationToken cancellationToken = default)
-    {
-        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
-        return await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM dbo.LogEntries WHERE Timestamp < @Cutoff", new { Cutoff = cutoff }, cancellationToken: cancellationToken));
-    }
+    public Task<int> DeleteOlderThanAsync(
+        DateTimeOffset cutoff, int batchSize = DataDefaults.DeleteBatchSize, CancellationToken cancellationToken = default) =>
+        SqlBatch.DeleteInBatchesAsync(
+            connectionFactory, "dbo.LogEntries", "Timestamp < @Cutoff", new { Cutoff = cutoff }, batchSize, cancellationToken);
 }

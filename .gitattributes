@@ -2,3 +2,4 @@
 *.sln text eol=crlf
 *.png binary
 *.jpg binary
+*.msgpack binary

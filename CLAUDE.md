@@ -20,7 +20,8 @@ Responder siempre en español. README, código, comentarios y commits en inglés
 - Tests de integración (necesitan Docker): `dotnet test LogPulse.sln --nologo --filter "Category=Integration"`
 - Formato: `dotnet format LogPulse.sln --verify-no-changes`
 - Paquetes vulnerables: `dotnet list LogPulse.sln package --vulnerable --include-transitive` (no debe listar ninguno)
-- Entorno completo: `docker compose up --build`
+- API en local: SQL Server con `docker run -d --name logpulse-sql -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=LogPulse_Dev_Passw0rd!" -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2022-latest` y luego `dotnet run --project src/LogPulse.Api` (http://localhost:5080, credenciales de desarrollo en `appsettings.Development.json`)
+- Entorno completo (desde H7): `docker compose up --build`
 
 ## Convenciones
 - Acceso a datos solo a través de interfaces en `Data`; la API depende de las interfaces, no de Dapper.
