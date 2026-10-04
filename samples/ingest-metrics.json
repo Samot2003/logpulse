@@ -1,0 +1,18 @@
+{
+  "samples": [
+    {
+      "timestamp": "2026-01-01T12:00:00+00:00",
+      "cpuPercent": 23.5,
+      "memoryUsedMb": 6144,
+      "memoryTotalMb": 16384,
+      "diskUsedPercent": 71.2
+    },
+    {
+      "timestamp": "2026-01-01T12:00:10+00:00",
+      "cpuPercent": 41.0,
+      "memoryUsedMb": 6230,
+      "memoryTotalMb": 16384,
+      "diskUsedPercent": 71.2
+    }
+  ]
+}

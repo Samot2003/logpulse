@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "timestamp": "2026-01-01T12:00:00+00:00",
+      "severity": "Information",
+      "source": "W3SVC",
+      "message": "Application pool 'DefaultAppPool' started"
+    },
+    {
+      "timestamp": "2026-01-01T12:00:05+00:00",
+      "severity": "Warning",
+      "source": "Disk",
+      "message": "Free space on C: below 15%"
+    },
+    {
+      "timestamp": "2026-01-01T12:00:09+00:00",
+      "severity": "Error",
+      "source": "OrdersService",
+      "message": "Timeout calling the payments API",
+      "exception": "System.TimeoutException: The operation has timed out.\n   at OrdersService.Checkout()"
+    }
+  ]
+}

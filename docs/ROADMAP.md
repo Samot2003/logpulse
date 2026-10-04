@@ -40,7 +40,7 @@ Se aplica a todos los hitos, además de sus criterios propios:
 
 **Aceptación:** `/agents` lista los 7 agentes; `/verificar 1` devuelve OK o AVISOS.
 
-## [ ] H3 — CI en GitHub Actions
+## [x] H3 — CI en GitHub Actions
 **Agentes:** devops-verifier, qa-tester
 - [x] Repo creado y primer push (lo hizo el usuario como `Samot2003/Proyecto-c-`).
 - [x] Renombrar el repo a `logpulse` en GitHub (usuario) y actualizar el remoto con `git remote set-url`.
@@ -56,38 +56,77 @@ Se aplica a todos los hitos, además de sus criterios propios:
 - [x] Primer run en verde: PR #1 y push a `main` (`b38e188`), confirmado por el usuario en la pestaña Actions.
 - [x] Dependabot funcionando: abrió su primer PR (actualización del grupo de GitHub Actions).
 - [x] Revisión del historial antes de publicar: sin secretos; menciones a empleadores neutralizadas; email noreply de GitHub para los commits nuevos.
-- [ ] Repo público (usuario: Settings → General → Change visibility).
-- [ ] Badge visible en el README (requiere repo público).
-- [ ] Protección de la rama `main` exigiendo los checks del CI (requiere repo público en el plan gratuito).
+- [x] Repo público.
+- [x] Badge visible en el README ("passing").
+- [x] Protección de `main` con un ruleset: PR obligatorio, los 5 checks del CI obligatorios (ligados a GitHub Actions), rama al día, sin borrado ni force push.
 
-**Aceptación:** run verde en GitHub y badge funcionando.
+**Aceptación:** run verde en GitHub y badge funcionando. ✅ Comprobado con la API pública de GitHub (push a `main` `595bc56` en verde, badge "passing", `main` protegida).
 
-**Verificación (`/verificar h3`):** qa-tester OK, devops-verifier AVISOS (CI remoto no verificable desde local con el repo privado; el usuario confirmó el run en verde).
+**Verificación (`/verificar h3`):** qa-tester OK, devops-verifier AVISOS (con el repo aún privado no podía ver el CI remoto; después se comprobó con la API pública).
 
-## [ ] H4 — API ASP.NET Core
+## [x] H4 — API ASP.NET Core
 **Agentes:** qa-tester, code-reviewer, security-auditor, api-tester
-- [ ] `src/LogPulse.Api` con controllers, `[ApiController]`, ProblemDetails, Swagger con Bearer y `/health` con check de SQL Server.
-- [ ] `Schema/002_auth.sql`: `Users`, `AgentCredentials`, `RefreshTokens`.
-- [ ] Auth de agentes (nombre de servidor + API key hasheada) → JWT rol `Agent` (15 min) + refresh token.
-- [ ] Auth de usuarios (usuario/contraseña con `PasswordHasher`, admin inicial desde configuración) → JWT rol `Viewer`/`Admin`.
-- [ ] Refresh tokens rotativos guardados como hash SHA-256, con detección de reutilización que revoca toda la familia.
-- [ ] Endpoints `POST /api/auth/token`, `/api/auth/refresh` y `/api/auth/revoke`, con rate limiting.
-- [ ] Ingesta (rol `Agent`) `POST /api/ingest/logs` y `/metrics`, en JSON y MessagePack, con límite de lote. El servidor sale del token.
-- [ ] Consulta (rol `Viewer`): `GET /api/servers`, `/api/logs`, `/api/metrics/{serverId}`, `/api/metrics/latest`.
-- [ ] `RetentionService` (`BackgroundService`) que purga los datos antiguos.
-- [ ] Tests unitarios de `TokenService` y de integración con `WebApplicationFactory` + `SqlServerFixture`.
-- [ ] Muestras de ingesta en `samples/` (JSON y `.msgpack`) para las pruebas E2E del api-tester.
+- [x] `src/LogPulse.Api` con controllers, `[ApiController]`, ProblemDetails, Swagger con Bearer (solo en Development) y `/health` con check de SQL Server.
+- [x] `Schema/002_auth.sql`: `Users`, `AgentCredentials`, `RefreshTokens`.
+- [x] Auth de agentes (nombre de servidor + API key hasheada) → JWT rol `Agent` (15 min) + refresh token. `POST /api/agents` (Admin) crea o rota claves.
+- [x] Auth de usuarios (usuario/contraseña con `PasswordHasher`, usuarios iniciales desde configuración) → JWT rol `Viewer`/`Admin`.
+- [x] Refresh tokens rotativos guardados como hash SHA-256, con detección de reutilización que revoca toda la familia.
+- [x] Endpoints `POST /api/auth/token` (usuarios), `/api/auth/agent-token` (agentes), `/api/auth/refresh` y `/api/auth/revoke`, con rate limiting por IP.
+- [x] Ingesta (rol `Agent`) `POST /api/ingest/logs` y `/metrics`, en JSON y MessagePack, con límite de lote. El servidor sale del token.
+- [x] Consulta (roles `Viewer` y `Admin`): `GET /api/servers`, `/api/logs`, `/api/metrics/{serverId}`, `/api/metrics/latest`.
+- [x] `RetentionService` (`BackgroundService`) que purga los datos antiguos y los refresh tokens caducados.
+- [x] Tests unitarios (tokens, auth, ingesta, retención, validación) y de integración con `WebApplicationFactory` + `SqlServerFixture`.
+- [x] Muestras de ingesta en `samples/` (JSON y `.msgpack`), con un test que comprueba que coinciden.
 
 **Avisos heredados de `/verificar 1` que se resuelven aquí:**
-- [ ] Límites de longitud de campos expuestos en Core (`Server.Name` 128, `Source` 256, `Message` 4000, tope para `Exception`); la ingesta valida o trunca antes del DAO para que un campo largo no tumbe el lote entero.
-- [ ] Tamaño máximo de lote en la ingesta y `ServerId` sobrescrito con el del token.
-- [ ] La API valida la longitud de `search` con un 400. Tener en cuenta que `EscapeLike` puede duplicarla y que el patrón de `LIKE` admite unos 4000 caracteres.
-- [ ] La API acota `page` y el rango de `GET /api/metrics/{serverId}` (rango máximo o agregación) para no cargar todo el histórico en memoria.
-- [ ] `RetentionService` borra por lotes (`DELETE TOP (N)` en bucle) para no superar el timeout ni bloquear la tabla.
-- [ ] Ingesta masiva eficiente (`SqlBulkCopy`, TVP o `INSERT` multi-fila) en lugar de un `INSERT` por fila.
-- [ ] `seenAt` del upsert de servidores = hora de recepción en la API, nunca el reloj del agente.
-- [ ] `DatabaseInitializer` seguro con varias instancias a la vez (`sp_getapplock`) y limitado a los recursos `Schema.*.sql`.
-- [ ] Valorar renombrar `SqlServerDao` (se confunde con "SQL Server").
+- [x] Límites de longitud de campos expuestos en Core (`FieldLimits`); la ingesta trunca antes del DAO para que un campo largo no tumbe el lote entero.
+- [x] Tamaño máximo de lote en la ingesta (1000) y `ServerId` siempre el del token.
+- [x] La API valida la longitud de `search` (500) con un 400.
+- [x] La API acota `page` (10000) y el rango de `GET /api/metrics/{serverId}` (24 h, y el DAO devuelve como mucho 20000 filas).
+- [x] `RetentionService` borra por lotes (`DELETE TOP (N)` en bucle).
+- [x] Ingesta masiva con `INSERT` multi-fila por bloques (`SqlBatch`).
+- [x] `seenAt` del upsert de servidores = hora de recepción en la API.
+- [x] `DatabaseInitializer` con `sp_getapplock` y limitado a los recursos `Schema.*.sql`.
+- [x] Renombrar `SqlServerDao`: **se mantiene**, porque es coherente con `SqlLogDao` y `SqlMetricDao` (prefijo `Sql` = implementación SQL Server) y la interfaz `IServerDao` deja claro el dominio.
+
+**`/verificar 4`, primera pasada:** api-tester AVISOS (~40 escenarios E2E en verde contra la API real), qa-tester AVISOS, code-reviewer FALLA, security-auditor FALLA. Bloqueantes corregidos:
+- [x] Carrera en la rotación de refresh tokens: el token rotado solo se inserta si su familia no está revocada (`TryInsertRotatedAsync`, comprobación e inserción atómicas con `UPDLOCK, HOLDLOCK`); tras el compare-and-set ya no se cancela a medias.
+- [x] Rotar la clave de un agente revoca sus sesiones; `DELETE /api/agents/{serverName}` revoca la credencial; sesiones con caducidad absoluta (`Jwt:MaxSessionDays`, 30 días).
+
+Avisos corregidos en la misma pasada: lote con elementos `null` → 400; líneas vacías aceptadas; timestamps futuros acotados a la hora de recepción; cuerpo de más de 4 MB → 413; `Retention:Interval` y `BatchSize` validados (lotes por debajo del umbral de escalado de bloqueos); opciones validadas antes de tocar la base de datos; la API no arranca fuera de Development con la clave JWT de desarrollo; timeout del applock; carrera en `CREATE DATABASE`; guardas en `SqlBatch`; constante de lote en el contrato de Data; test dependiente del orden; fakes con la semántica de la collation de SQL Server; `AgentsController` en su propio archivo; SQL Server publicado solo en `127.0.0.1` en la documentación.
+
+**`/verificar 4`, segunda pasada:** api-tester AVISOS, qa-tester AVISOS, security-auditor AVISOS (bloqueantes anteriores confirmados como corregidos), code-reviewer FALLA. Corregido:
+- [x] Bloqueante: carrera entre el login de un agente y la rotación de su clave. Primer intento con horas (`FamilyCreatedAt > CreatedAt`), descartado en la tercera pasada (ver abajo).
+- [x] MessagePack malformado → 400 (formatter propio en lugar del paquete `MessagePack.AspNetCoreMvcFormatter`).
+- [x] Perder el compare-and-set contra una revocación ya no se registra como reutilización.
+- [x] `/api/auth/*`: solo JSON y cuerpo de 16 KB como máximo.
+- [x] `serverName` de agentes restringido a caracteres seguros para URL.
+- [x] Cadena de conexión de desarrollo con `127.0.0.1` y reintentos al conectar con SQL Server durante el arranque (hasta ~1 min).
+- [x] Tests del 413, de opciones inválidas al arrancar, de timestamps futuros en métricas y de la carrera login/rotación.
+
+**`/verificar 4`, tercera pasada:** security-auditor AVISOS, code-reviewer FALLA. Corregido:
+- [x] Bloqueante: comparar horas no cerraba la carrera login/rotación (la rotación toma su hora antes de bloquear la fila). Ahora cada rotación incrementa atómicamente `AgentCredentials.KeyVersion`, la sesión guarda la versión de la fila cuya clave verificó (`RefreshTokens.SubjectVersion`) y el refresh exige que coincidan. No depende de relojes, de la precisión ni del nivel de aislamiento.
+- [x] DoS: el límite de 1000 elementos se aplica **durante** la deserialización (converter JSON y formatter MessagePack sobre el lote completo), no después de deserializar y validar millones de elementos. Cuarta pasada: también se rechazan las claves repetidas (`"entries"` dos veces) y los lotes con más de 8 claves, que permitían multiplicar el presupuesto de una petición.
+- [x] `/api/auth/*` sin `[Consumes]` (un content-type distinto da 415, no un 401 confuso); el formatter de MessagePack solo lee los lotes de ingesta.
+- [x] El seed valida nombres y roles con las mismas reglas que la API; los reintentos de arranque cubren también la base de datos de la aplicación, con un plazo total de 2 minutos.
+
+**`/verificar 4`, cuarta pasada:** code-reviewer AVISOS, security-auditor AVISOS. **Sin bloqueantes: H4 cerrado.** Corregido además:
+- [x] Claves repetidas en el lote (multiplicaban el presupuesto de elementos) y lotes con más de 8 claves → 400.
+- [x] MessagePack con claves en camelCase → 400 (antes 200 con entradas vacías: pérdida silenciosa de datos).
+- [x] MessagePack de más de 4 MB → 413 (la librería envolvía la excepción de Kestrel); un payload truncado sigue siendo 400.
+- [x] La ruta de los errores JSON vuelve a indicar qué elemento del lote falla (`$.entries[3].severity`).
+- [x] El seed valida el nombre del agente con el mismo atributo que la API (sin aceptar un salto de línea final).
+- [x] `TokenSubject.Version` obligatorio; el test de revocación aísla `IsActive`; tests de los nuevos límites y del formatter.
+
+**Aceptación:** flujo completo de auth, ingesta y consulta verificado por el api-tester contra la API levantada (pasadas 1 y 2, unos 40 escenarios). Los cambios posteriores están cubiertos por los tests de integración (107 tests en total).
+
+**Avisos que pasan a otros hitos:**
+- H5: el agente debe truncar con `FieldLimits` y partir los lotes por bytes (`IngestLimits.MaxRequestBytes`); sin reintentos automáticos en `/api/auth/refresh`.
+- H6: rate limit en la ingesta por agente (hoy solo limita el tamaño de cada petición).
+- H7: limitar los reintentos de arranque a errores transitorios (hoy reintenta cualquier `DbException` durante ~2 min, también un error de sintaxis en un script).
+- H6/H7: `UseForwardedHeaders` y partición del rate limit detrás de proxy o del dashboard (hoy por IP y compartido por todos los endpoints de auth); valorar límite por cuenta.
+- H6: ventana temporal por defecto o rate limit en `GET /api/logs` para consultas caras sin filtros.
+- H8: al desplegar, login de SQL con permisos mínimos (hoy la API crea la base de datos y aplica DDL al arrancar) y seed desactivado en producción.
 
 **Aceptación:** flujo completo de auth, ingesta y consulta verificado por api-tester contra la API levantada.
 
