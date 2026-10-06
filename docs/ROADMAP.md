@@ -130,17 +130,45 @@ Avisos corregidos en la misma pasada: lote con elementos `null` → 400; líneas
 
 **Aceptación:** flujo completo de auth, ingesta y consulta verificado por api-tester contra la API levantada.
 
-## [ ] H5 — Agent (Worker Service)
+## [x] H5 — Agent (Worker Service)
 **Agentes:** qa-tester, code-reviewer, security-auditor
-- [ ] `src/LogPulse.Agent` con colectores `IMetricsCollector` para Windows y Linux, y disco con `DriveInfo`.
-- [ ] Tail de archivos de log que guarda el offset y soporta la rotación de archivos.
-- [ ] `Channel` acotado, envío por lotes en MessagePack y reintentos con `Microsoft.Extensions.Http.Resilience`.
-- [ ] `DelegatingHandler` con renovación automática del token.
-- [ ] Baja la frecuencia de envío cuando no hay viewers conectados.
-- [ ] Publish self-contained `win-x64` y soporte de servicio de Windows.
-- [ ] Tests de parsers, tailer, batching y handler de tokens; integración agente → API.
+- [x] `src/LogPulse.Agent` con colectores `IMetricsCollector`: Windows (`GetSystemTimes`, `GlobalMemoryStatusEx`) y Linux (`/proc/stat`, `/proc/meminfo`); disco con `DriveInfo` (misma fórmula que `df`).
+- [x] Tail de archivos de log: posición confirmada guardada en disco (entrega al menos una vez), rotación por truncado o sustitución detectada con un hash de los primeros bytes, BOM y CRLF, severidad deducida de la palabra de nivel.
+- [x] Dos `Channel` acotados (logs: espera; métricas: descarta las más antiguas), lotes en MessagePack partidos por número y por bytes, reintentos con `Microsoft.Extensions.Http.Resilience`; un lote fallido se reenvía primero (mantiene el orden), un 413 lo parte por la mitad y solo se descartan los rechazados por payload (400/422).
+- [x] `DelegatingHandler` con renovación automática del token: refresh antes de caducar sin reintentos automáticos, login de nuevo si el refresh se rechaza, renovaciones serializadas y caducidad anclada al reloj local con la cabecera `Date`.
+- [x] Baja la frecuencia de métricas sin viewers: `IngestResult.ViewersOnline` en cada respuesta de ingesta (por ahora siempre `true`; H6 lo conectará al contador de SignalR).
+- [x] Publish self-contained `win-x64` en un solo `.exe` (perfil `win-x64`, sin ajustes de desarrollo ni lock file) y soporte de servicio de Windows (`AddWindowsService`).
+- [x] Tests de parsers, tailer, checkpoints, lotes, envío, tokens y opciones; integración del host real del agente contra la API y SQL Server.
 
-**Aceptación:** un agente local aparece en `/api/servers` y sus logs y métricas se pueden consultar.
+**Avisos de H4 resueltos aquí:**
+- [x] El agente trunca con `FieldLimits` (`FieldLimits.Truncate`, compartido con la API) y parte los lotes por bytes (estimación con cota superior comprobada en tests).
+- [x] Sin reintentos automáticos en `/api/auth/refresh`.
+
+**`/verificar 5`, primera pasada:** qa-tester FALLA, code-reviewer FALLA, security-auditor FALLA. Bloqueantes corregidos:
+- [x] `.gitignore` ignoraba la carpeta de código `Logs/` (la regla `logs/` del log de desarrollo coincide sin distinguir mayúsculas en Windows): el log de desarrollo pasa a `dev-logs/`.
+- [x] La posición inicial de un archivo sin checkpoint no se guardaba: un reinicio antes del primer lote confirmado saltaba lo escrito mientras tanto. Ahora se guarda al abrirlo (o en el byte 0 si aún no existe), sin pisar una posición conocida.
+- [x] Instalación como servicio del README insegura (API key en el registro, legible por usuarios locales; LocalSystem en una carpeta modificable por cualquier usuario autenticado). Ahora: `Program Files`, cuenta virtual `NT SERVICE\LogPulseAgent`, estado en `ProgramData` con ACL propia y la clave en `appsettings.Production.json` legible solo por el servicio y los administradores.
+
+Avisos corregidos en la misma pasada: ninguna excepción inesperada para el host (envío, archivo ilegible, checkpoint manipulado); 413 parte el lote por la mitad en lugar de descartarlo y 415 se reintenta; las métricas salen antes de cada lote de logs; timeouts de Polly a medida de lotes grandes y `MaxBatchBytes` por defecto de 512 KB (por debajo del límite habitual de nginx); la publicación solo incluye `appsettings.json` (lista blanca); cabecera `Authorization` redactada en los logs de `HttpClient`; respuesta 200 que no es el JSON de la API → reintentar; sin `!` injustificados; arrancar por el final no corta una línea a medio escribir; checkpoint escrito sin seguir enlaces plantados en el temporal. Tests nuevos: posición inicial, alineación de línea, checkpoint manipulado, regla de muestreo ociosa, partición por 413, prioridad de métricas y el cableado real de DI (401 → renovación y reenvío; login y refresh sin reintentos).
+
+**`/verificar 5`, segunda pasada:** qa-tester AVISOS, code-reviewer AVISOS, security-auditor FALLA (bloqueantes de la primera pasada confirmados como resueltos). Corregido:
+- [x] Bloqueante: el script del README daba a `icacls` nombres de grupo en inglés (`Administrators`), que no existen en un Windows en otro idioma; el comando fallaba en silencio y la clave quedaba legible. Ahora usa SIDs (`*S-1-5-32-544`, `*S-1-5-18`), se detiene en el primer fallo (`$ErrorActionPreference` y `$LASTEXITCODE`), restringe el archivo antes de escribir la clave (pedida con `Read-Host`, fuera del historial), fija el propietario de la carpeta de estado, registra el origen del Event Log y exige que las carpetas de los logs solo sean modificables por administradores.
+
+Avisos corregidos: las métricas aceptadas ya no reinician el contador de fallos mientras un lote de logs sigue fallando; checkpoint con `Flush(flushToDisk: true)` antes del rename; como mucho 1 MB por archivo y sondeo (un backlog no bloquea los demás archivos); el cliente de ingesta deja los timeouts a Polly (`HttpClient.Timeout` infinito); una carpeta inexistente (volumen sin montar) no se trata como archivo nuevo; un fallo de disco envía el último valor conocido en lugar de perder CPU y memoria; fallos de muestreo registrados una vez por racha; excepciones inesperadas del envío siempre registradas; `mkdir` de `dev-logs` en el README. Tests nuevos: bucles reales del tailer (reparto entre archivos, posiciones iniciales) y del sampler (sigue tras un fallo), carpeta inexistente, contador de fallos y bordes de `Truncate`.
+
+**`/verificar 5`, tercera pasada:** qa-tester OK, code-reviewer AVISOS, security-auditor AVISOS. **Sin bloqueantes: H5 cerrado.** El security-auditor comprobó en este Windows es-ES que los SID funcionan donde `"Administrators"` falla (exit 1332) y que `Set-Content` conserva la ACL del archivo ya restringido. Corregido además:
+- [x] El tope de 1 MB por archivo y sondeo limitaba la velocidad a 1 MB/s por archivo: mientras quede backlog se hace otra ronda inmediata (round-robin) en vez de esperar al siguiente tick.
+- [x] `HttpClient.Timeout` del cliente de ingesta finito (5 min, por encima del peor caso de Polly): la lectura del cuerpo de la respuesta queda fuera de la pipeline y no puede colgarse para siempre.
+- [x] Un archivo de posiciones ilegible ya no impide arrancar (se trata como dañado).
+- [x] Script de instalación: un único bloque `& { }` (se detiene en el primer fallo aunque se pegue línea a línea), servicio en Manual hasta el final, comprobación de que la carpeta de estado está vacía, clave con `Read-Host -AsSecureString`, solo se copian el `.exe` y `appsettings.json` (publicado sin elevar), pasos para deshacer una instalación a medias. Sintaxis comprobada con el parser de PowerShell 5.1.
+- [x] Nombre del servicio coherente (`LogPulseAgent`) y origen del Event Log registrado para él; ajustes que faltaban en la tabla del README.
+
+**Avisos que pasan a otros hitos:**
+- H6: `IngestResult.ViewersOnline` dirá a cualquier token de agente si alguien mira el dashboard; valorar si es aceptable al conectarlo a SignalR. Sigue pendiente el rate limit de ingesta por agente.
+- H7: en compose el agente hablará con `http://api:...`, que no es loopback, y `AgentStartupChecks` lo rechazará fuera de Development: decidir entre TLS interno o un entorno propio. Documentar la instalación del agente en Linux.
+- Pendiente (sin hito concreto): validar `DiskPath` al arrancar (si el disco no se puede leer desde la primera muestra no se envían métricas); comprobar en el tailer que la ruta final del handle coincide con la configurada (hoy se documenta que las carpetas de logs no deben ser modificables por usuarios); test del `catch` de `IngestSender.ExecuteAsync`. Límites documentados: una entrada por línea física y hora de lectura como timestamp.
+
+**Aceptación:** un agente local aparece en `/api/servers` y sus logs y métricas se pueden consultar. ✅ Comprobado en local con la API y el agente en Development: `demo-server` aparece, las líneas añadidas a `dev-logs/demo.log` llegan con su severidad (Error, Warning) y hay una muestra de métricas cada 5 s.
 
 ## [ ] H6 — Dashboard en tiempo real
 **Agentes:** qa-tester, code-reviewer, ui-tester

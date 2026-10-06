@@ -105,10 +105,19 @@ public class IngestServiceTests
     {
         var value = new string('a', 8) + "😀" + "tail"; // the emoji occupies indexes 8 and 9
 
-        var truncated = IngestService.Truncate(value, 10);
+        var truncated = FieldLimits.Truncate(value, 10);
 
         Assert.Equal(new string('a', 8) + "…", truncated);
-        Assert.Equal("short", IngestService.Truncate("short", 10));
+        Assert.Equal("short", FieldLimits.Truncate("short", 10));
+    }
+
+    [Fact]
+    public void Truncate_keeps_values_up_to_the_limit_and_rejects_impossible_limits()
+    {
+        Assert.Equal("", FieldLimits.Truncate("", 10));
+        Assert.Equal("exactly10!", FieldLimits.Truncate("exactly10!", 10));
+        Assert.Equal("exactly10…", FieldLimits.Truncate("exactly10!+", 10)); // 9 characters plus the ellipsis
+        Assert.Throws<ArgumentOutOfRangeException>(() => FieldLimits.Truncate("abc", 1));
     }
 
     [Fact]

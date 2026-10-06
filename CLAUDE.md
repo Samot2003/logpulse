@@ -21,6 +21,8 @@ Responder siempre en español. README, código, comentarios y commits en inglés
 - Formato: `dotnet format LogPulse.sln --verify-no-changes`
 - Paquetes vulnerables: `dotnet list LogPulse.sln package --vulnerable --include-transitive` (no debe listar ninguno)
 - API en local: SQL Server con `docker run -d --name logpulse-sql -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=LogPulse_Dev_Passw0rd!" -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2022-latest` y luego `dotnet run --project src/LogPulse.Api` (http://localhost:5080, credenciales de desarrollo en `appsettings.Development.json`)
+- Agente en local (con la API levantada): `dotnet run --project src/LogPulse.Agent`. Envía como `demo-server` y sigue `src/LogPulse.Agent/dev-logs/demo.log` (ignorado por git).
+- Publicar el agente para Windows: `dotnet publish src/LogPulse.Agent -p:PublishProfile=win-x64` (un `.exe` self-contained en `artifacts/agent-win-x64`). No debe cambiar ningún `packages.lock.json`.
 - Entorno completo (desde H7): `docker compose up --build`
 
 ## Convenciones

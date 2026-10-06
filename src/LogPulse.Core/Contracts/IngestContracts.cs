@@ -86,4 +86,8 @@ public sealed class IngestMetricBatch : IValidatableObject
             : [];
 }
 
-public sealed record IngestResult(int Accepted);
+/// <param name="Accepted">Items stored.</param>
+/// <param name="ViewersOnline">
+/// Whether anyone is watching the dashboard. Agents sample metrics less often while nobody is.
+/// </param>
+public sealed record IngestResult(int Accepted, bool ViewersOnline);
