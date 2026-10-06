@@ -29,3 +29,7 @@ appsettings.*.local.json
 # OS
 Thumbs.db
 .DS_Store
+
+# Agent runtime files (local development). Not "logs/": on Windows that would also match the Logs/ source folder.
+src/LogPulse.Agent/dev-logs/
+src/LogPulse.Agent/state/

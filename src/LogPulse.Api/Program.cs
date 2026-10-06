@@ -40,6 +40,7 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<IngestService>();
+builder.Services.AddSingleton<IViewerPresence, AlwaysWatchedPresence>();
 builder.Services.AddSingleton<RetentionService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionService>());
 

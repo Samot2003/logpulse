@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\src\LogPulse.Core\LogPulse.Core.csproj" />
     <ProjectReference Include="..\..\src\LogPulse.Data\LogPulse.Data.csproj" />
     <ProjectReference Include="..\..\src\LogPulse.Api\LogPulse.Api.csproj" />
+    <ProjectReference Include="..\..\src\LogPulse.Agent\LogPulse.Agent.csproj" />
   </ItemGroup>
 
 </Project>

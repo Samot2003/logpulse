@@ -53,6 +53,105 @@ Swagger UI is at <http://localhost:5080/swagger>. The development settings (`app
 
 Sample payloads are in [samples/](samples/) (JSON and MessagePack).
 
+## Run the agent
+
+The agent (`src/LogPulse.Agent`) is a .NET worker service that runs on the monitored server. It samples CPU, memory and disk usage, follows log files like `tail -F`, and sends both to the API in MessagePack batches.
+
+With the API running locally, start it with the development settings (it reports as `demo-server` and follows `src/LogPulse.Agent/dev-logs/demo.log`):
+
+```bash
+mkdir -p src/LogPulse.Agent/dev-logs
+dotnet run --project src/LogPulse.Agent
+echo "2026-10-06 12:00:00 ERROR payment timeout" >> src/LogPulse.Agent/dev-logs/demo.log
+```
+
+The line shows up in `GET /api/logs` as an `Error`, and `GET /api/metrics/latest` shows the server's latest sample.
+
+How it works:
+
+- **Metrics**: CPU and memory from `/proc/stat` and `/proc/meminfo` on Linux and from the Win32 API (`GetSystemTimes`, `GlobalMemoryStatusEx`) on Windows; disk usage with `DriveInfo`. One sample every 5 s while someone is watching the dashboard, every 30 s otherwise (the API says which in every ingestion response).
+- **Logs**: new lines of each configured file, with the severity guessed from the level word (`ERROR`, `WRN`, `fail:`...). Rotation (truncate or replace) is detected with a hash of the file's first bytes. The position confirmed by the API is saved, so a restart resumes where it stopped (at-least-once delivery).
+- **Sending**: bounded in-memory buffers, batches split by item count and size, retries with exponential backoff, timeouts and a circuit breaker (`Microsoft.Extensions.Http.Resilience`). A batch that fails is kept and sent again first, so lines keep their order.
+- **Auth**: the agent logs in with its API key and renews its token with the refresh token before it expires. Refreshes are never retried automatically (a refresh token works once); if one is refused, the agent logs in again.
+
+### Configuration
+
+Settings live in the `Agent` section of `appsettings.json`, `appsettings.{Environment}.json` (Production when nothing is set) and environment variables (`Agent__ApiKey`, `Agent__LogFiles__0__Path`...). The API key is a secret: never commit it, and keep it where only the agent can read it. In development use `dotnet user-secrets` (loaded only in Development); on a server, a settings file readable only by the service account (see below). Outside Development the agent refuses the development key and plain HTTP to a remote API.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ApiBaseUrl` | — | Address of the API |
+| `ServerName`, `ApiKey` | — | Credentials created with `POST /api/agents` |
+| `LogFiles` | `[]` | Files to follow: `{ "Path": "...", "Source": "..." }` |
+| `MetricsInterval` / `IdleMetricsInterval` | `00:00:05` / `00:00:30` | Sampling with and without dashboard viewers |
+| `SendInterval` | `00:00:05` | How often buffered data is sent |
+| `LogPollInterval` | `00:00:01` | How often the log files are checked for new lines |
+| `MaxBatchItems` / `MaxBatchBytes` | `500` / `524288` | Limits of one request (lower `MaxBatchBytes` if a proxy answers 413) |
+| `BufferCapacity` | `10000` | Items kept in memory per buffer while the API is unreachable |
+| `DiskPath` | system drive | Drive or mount point reported as disk usage |
+| `ReadExistingLogs` | `false` | Also send what a file already contains the first time it is seen |
+| `StateDirectory` | `state` | Where the saved log positions are kept |
+
+### Install as a Windows service
+
+Publish without elevation (`dotnet publish src/LogPulse.Agent -p:PublishProfile=win-x64` writes a self-contained `LogPulse.Agent.exe` to `artifacts/agent-win-x64`), then run the block below in an elevated Windows PowerShell, from the repository folder, after setting the three values at its top.
+
+- The agent runs under its own low-privilege virtual account (`NT SERVICE\LogPulseAgent`), not LocalSystem.
+- Every folder it uses is writable only by administrators (and, for its state, by the service).
+- The block runs as a single unit and stops at the first failing step, even when pasted line by line. The service is set to start automatically only at the very end.
+- Groups are given as well-known SIDs (`*S-1-5-32-544` Administrators, `*S-1-5-18` SYSTEM), so the block works on any Windows display language.
+
+```powershell
+& {
+$ErrorActionPreference = "Stop"
+function Assert-Ok { if ($LASTEXITCODE -ne 0) { throw "The previous command failed with exit code $LASTEXITCODE." } }
+$apiBaseUrl = "https://logpulse.example.com/"
+$serverName = "web-01"
+$logFolder  = "D:\AppLogs"   # must be writable only by administrators and the application (see below)
+
+# 1. Only the executable and appsettings.json, copied where only administrators can write.
+$app = "C:\Program Files\LogPulse Agent"
+New-Item -ItemType Directory $app | Out-Null
+Copy-Item artifacts\agent-win-x64\LogPulse.Agent.exe, artifacts\agent-win-x64\appsettings.json $app
+
+# 2. The service, under its own virtual account; manual start until everything else is in place.
+New-Service -Name LogPulseAgent -DisplayName "LogPulse Agent" -BinaryPathName "`"$app\LogPulse.Agent.exe`"" -StartupType Manual | Out-Null
+sc.exe config LogPulseAgent obj= "NT SERVICE\LogPulseAgent"; Assert-Ok
+New-EventLog -LogName Application -Source LogPulse.Agent, LogPulseAgent
+
+# 3. State folder (saved log positions): writable by the service only, and empty (nobody slipped files in).
+$data = "C:\ProgramData\LogPulse Agent"
+New-Item -ItemType Directory $data | Out-Null
+icacls $data /setowner "*S-1-5-32-544"; Assert-Ok
+icacls $data /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "NT SERVICE\LogPulseAgent:(OI)(CI)M"; Assert-Ok
+if (Get-ChildItem -LiteralPath $data -Force) { throw "$data is not empty." }
+
+# 4. Settings with the API key: the file is locked down first, then written. The key is typed hidden.
+$settings = "$app\appsettings.Production.json"
+New-Item -ItemType File $settings | Out-Null
+icacls $settings /inheritance:r /grant:r "*S-1-5-32-544:F" "NT SERVICE\LogPulseAgent:R"; Assert-Ok
+$key = (New-Object PSCredential "key", (Read-Host "API key returned by POST /api/agents" -AsSecureString)).GetNetworkCredential().Password
+@{ Agent = @{
+    ApiBaseUrl = $apiBaseUrl
+    ServerName = $serverName
+    ApiKey = $key
+    StateDirectory = $data
+    LogFiles = @(@{ Path = "$logFolder\app.log"; Source = "app" })
+} } | ConvertTo-Json -Depth 4 | Set-Content $settings -Encoding utf8
+
+# 5. Read access to the followed logs, then start (and from now on, at every boot).
+icacls $logFolder /grant "NT SERVICE\LogPulseAgent:(OI)(CI)R"; Assert-Ok
+Set-Service LogPulseAgent -StartupType Automatic
+Start-Service LogPulseAgent
+}
+```
+
+If a step fails, remove what was created before running the block again: `sc.exe delete LogPulseAgent`, then the `C:\Program Files\LogPulse Agent` and `C:\ProgramData\LogPulse Agent` folders.
+
+The folders of the followed logs must be writable only by administrators and the application that writes them. Otherwise a local user could replace a log with a link to another file the service can read, and its content would be sent to the API.
+
+Known limits: every physical line is one log entry (a multi-line stack trace becomes several), and the timestamp is the time the line was read (lines read late, for example after an outage, get that later time).
+
 ## License
 
 [MIT](LICENSE)

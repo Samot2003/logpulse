@@ -23,9 +23,9 @@ public sealed class IngestService(IServerDao servers, ILogDao logs, IMetricDao m
                 Timestamp = ClampFuture(e.Timestamp, now),
                 Severity = e.Severity,
                 // Normalize instead of rejecting: one odd line must not make the agent lose the whole batch.
-                Source = string.IsNullOrWhiteSpace(e.Source) ? UnknownSource : Truncate(e.Source, FieldLimits.LogSource),
-                Message = Truncate(e.Message, FieldLimits.LogMessage),
-                Exception = e.Exception is null ? null : Truncate(e.Exception, FieldLimits.LogException),
+                Source = string.IsNullOrWhiteSpace(e.Source) ? UnknownSource : FieldLimits.Truncate(e.Source, FieldLimits.LogSource),
+                Message = FieldLimits.Truncate(e.Message, FieldLimits.LogMessage),
+                Exception = e.Exception is null ? null : FieldLimits.Truncate(e.Exception, FieldLimits.LogException),
             })
             .ToList();
 
@@ -51,25 +51,6 @@ public sealed class IngestService(IServerDao servers, ILogDao logs, IMetricDao m
             .ToList();
 
         return await metrics.InsertBatchAsync(samples, cancellationToken);
-    }
-
-    /// <summary>Shortens the value to at most <paramref name="maxLength"/> characters, ending in an ellipsis.</summary>
-    public static string Truncate(string value, int maxLength)
-    {
-        ArgumentNullException.ThrowIfNull(value);
-        if (value.Length <= maxLength)
-        {
-            return value;
-        }
-
-        var cut = maxLength - 1;
-        // Never split a surrogate pair (emoji and other non-BMP characters).
-        if (char.IsHighSurrogate(value[cut - 1]))
-        {
-            cut--;
-        }
-
-        return string.Concat(value.AsSpan(0, cut), "…");
     }
 
     public const string UnknownSource = "unknown";

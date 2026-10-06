@@ -12,7 +12,7 @@ namespace LogPulse.Api.Controllers;
 [Consumes("application/json", MessagePackInputFormatter.MediaType)]
 [Produces("application/json")]
 [RequestSizeLimit(IngestLimits.MaxRequestBytes)]
-public sealed class IngestController(IngestService ingest) : ControllerBase
+public sealed class IngestController(IngestService ingest, IViewerPresence viewers) : ControllerBase
 {
     /// <summary>Stores a batch of log entries for the agent's own server (JSON or MessagePack).</summary>
     [HttpPost("logs")]
@@ -25,7 +25,7 @@ public sealed class IngestController(IngestService ingest) : ControllerBase
             return Forbid();
         }
 
-        return Ok(new IngestResult(await ingest.IngestLogsAsync(serverName, batch, cancellationToken)));
+        return Ok(new IngestResult(await ingest.IngestLogsAsync(serverName, batch, cancellationToken), viewers.AnyViewers));
     }
 
     /// <summary>Stores a batch of metric samples for the agent's own server (JSON or MessagePack).</summary>
@@ -39,7 +39,7 @@ public sealed class IngestController(IngestService ingest) : ControllerBase
             return Forbid();
         }
 
-        return Ok(new IngestResult(await ingest.IngestMetricsAsync(serverName, batch, cancellationToken)));
+        return Ok(new IngestResult(await ingest.IngestMetricsAsync(serverName, batch, cancellationToken), viewers.AnyViewers));
     }
 
     // The server is the one the agent authenticated as; the payload has no way to name another one.
