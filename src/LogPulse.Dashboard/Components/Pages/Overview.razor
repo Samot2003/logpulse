@@ -1,0 +1,142 @@
+@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits LivePageBase
+@inject ILogPulseApi Api
+
+<PageTitle>Servers · LogPulse</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Servers</h1>
+        @if (_servers is { Count: > 0 })
+        {
+            <p class="muted">@_servers.Count server@(_servers.Count == 1 ? "" : "s"), @OnlineCount online</p>
+        }
+    </div>
+    <LiveIndicator Status="Feed.Status" />
+</div>
+
+<ErrorNotice Message="@Error" OnRetry="LoadAsync" />
+
+@if (_servers is null)
+{
+    @if (Error is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+}
+else if (_servers.Count == 0)
+{
+    <div class="card empty">
+        <h2>No server has reported yet</h2>
+        <p>Start an agent and its server appears here within a few seconds.</p>
+        <code>dotnet run --project src/LogPulse.Agent</code>
+    </div>
+}
+else
+{
+    <div class="server-grid">
+        @foreach (var server in _servers)
+        {
+            <ServerCard @key="server.Id" Server="server" Latest="@_latest.GetValueOrDefault(server.Id)" Online="IsOnline(server)" Now="Now" />
+        }
+    </div>
+}
+
+@code {
+    private static readonly TimeSpan ClockTick = TimeSpan.FromSeconds(5);
+
+    private List<Server>? _servers;
+    private Dictionary<int, MetricSample> _latest = [];
+    private ITimer? _clock;
+    private int _loads;
+
+    private DateTimeOffset Now => Time.GetUtcNow();
+
+    private int OnlineCount => _servers?.Count(IsOnline) ?? 0;
+
+    private bool IsOnline(Server server) => Now - server.LastSeenAt <= Options.Value.OfflineAfter;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        base.OnAfterRender(firstRender);
+        if (firstRender)
+        {
+            // "Last seen" and online/offline change with time alone, without any new data.
+            _clock = Time.CreateTimer(_ => RunOnDispatcher(() => Task.CompletedTask), null, ClockTick, ClockTick);
+        }
+    }
+
+    private Task LoadAsync()
+    {
+        // Several loads can overlap (a reconnection, two events of a new server): only the latest one is shown.
+        var load = ++_loads;
+        return TryLoadAsync(
+            async () =>
+            {
+                var servers = await Api.GetServersAsync();
+                var latest = await Api.GetLatestMetricsAsync();
+                if (load == _loads)
+                {
+                    _servers = [.. servers];
+                    _latest = latest.ToDictionary(m => m.ServerId);
+                }
+            },
+            isCurrent: () => load == _loads);
+    }
+
+    protected override async Task OnMetricsReceivedAsync(MetricsReceivedEvent received)
+    {
+        if (!await SeenAsync(received.ServerId, received.LastSeenAt) || received.Samples.Count == 0)
+        {
+            return;
+        }
+
+        var newest = received.Samples.MaxBy(s => s.Timestamp)!;
+        if (!_latest.TryGetValue(received.ServerId, out var current) || newest.Timestamp >= current.Timestamp)
+        {
+            _latest[received.ServerId] = newest;
+        }
+    }
+
+    protected override async Task OnLogsReceivedAsync(LogsReceivedEvent received) =>
+        await SeenAsync(received.ServerId, received.LastSeenAt);
+
+    protected override Task OnReconnectedAsync() => LoadAsync();
+
+    /// <summary>Updates the server's last-seen time. A server not in the list yet is new: reload to show it.</summary>
+    private async Task<bool> SeenAsync(int serverId, DateTimeOffset lastSeenAt)
+    {
+        if (_servers is null)
+        {
+            return false;
+        }
+
+        var index = _servers.FindIndex(s => s.Id == serverId);
+        if (index < 0)
+        {
+            await LoadAsync();
+            return false;
+        }
+
+        if (lastSeenAt > _servers[index].LastSeenAt)
+        {
+            _servers[index] = _servers[index] with { LastSeenAt = lastSeenAt };
+        }
+
+        return true;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _clock?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}

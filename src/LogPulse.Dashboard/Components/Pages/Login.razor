@@ -1,0 +1,103 @@
+@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@attribute [AllowAnonymous]
+@inject IAuthApi AuthApi
+@inject SessionStore Sessions
+@inject NavigationManager Navigation
+
+@* Static server rendering: the login needs the HttpContext to set the session cookie. *@
+<PageTitle>Log in · LogPulse</PageTitle>
+
+<section class="login">
+    <h1>Log in</h1>
+    <p class="muted">Use a LogPulse user of the API (Viewer or Admin).</p>
+
+    @if (_error is not null)
+    {
+        <div class="notice notice-error" role="alert">@_error</div>
+    }
+    else if (Expired is not null)
+    {
+        <div class="notice" role="status">Your session has ended. Log in again.</div>
+    }
+
+    <EditForm Model="Input" method="post" OnValidSubmit="LogInAsync" FormName="login" class="form">
+        <DataAnnotationsValidator />
+        <label class="field">
+            <span>User name</span>
+            <InputText @bind-Value="Input.UserName" autocomplete="username" autofocus />
+            <ValidationMessage For="() => Input.UserName" />
+        </label>
+        <label class="field">
+            <span>Password</span>
+            <InputText @bind-Value="Input.Password" type="password" autocomplete="current-password" />
+            <ValidationMessage For="() => Input.Password" />
+        </label>
+        <button type="submit" class="button">Log in</button>
+    </EditForm>
+</section>
+
+@code {
+    private string? _error;
+
+    [CascadingParameter]
+    public HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    public LoginInput Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Expired { get; set; }
+
+    private async Task LogInAsync()
+    {
+        var clientAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        LoginResult result;
+        try
+        {
+            result = await AuthApi.LoginAsync(Input.UserName, Input.Password, clientAddress, HttpContext.RequestAborted);
+        }
+        catch (Exception ex) when (ApiErrors.IsApiFailure(ex))
+        {
+            _error = ApiErrors.Describe(ex);
+            return;
+        }
+
+        switch (result)
+        {
+            case { Outcome: LoginOutcome.Success, Tokens: { } tokens }:
+                // Logging in again from a browser that already has a session replaces it instead of orphaning it.
+                if (HttpContext.User.FindFirst(DashboardClaims.SessionId)?.Value is { } previous)
+                {
+                    await Sessions.EndAsync(previous, HttpContext.RequestAborted);
+                }
+
+                var session = Sessions.Create(Input.UserName, clientAddress, tokens);
+                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, DashboardClaims.Principal(session));
+                Navigation.NavigateTo(LocalUrl.OrHome(ReturnUrl));
+                break;
+            case { Outcome: LoginOutcome.TooManyAttempts }:
+                _error = "Too many login attempts. Wait a minute and try again.";
+                break;
+            default:
+                _error = "Wrong user name or password.";
+                break;
+        }
+    }
+
+    public sealed class LoginInput
+    {
+        [Required(ErrorMessage = "Enter your user name.")]
+        [StringLength(FieldLimits.UserName)]
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Enter your password.")]
+        [StringLength(256)]
+        public string Password { get; set; } = string.Empty;
+    }
+}

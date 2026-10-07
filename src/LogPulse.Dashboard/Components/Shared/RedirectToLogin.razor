@@ -1,0 +1,8 @@
+@inject NavigationManager Navigation
+
+@code {
+    // A safety net: the pages carry [Authorize], so the cookie handler normally redirects to /login before any
+    // rendering. This only runs if a page is ever rendered for a user who is not signed in.
+    protected override void OnInitialized() =>
+        Navigation.NavigateTo("login?returnUrl=" + Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri)), forceLoad: true);
+}

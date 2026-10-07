@@ -1,3 +1,4 @@
+using LogPulse.Api.Live;
 using LogPulse.Core.Contracts;
 using LogPulse.Core.Models;
 using LogPulse.Data.Daos;
@@ -7,8 +8,9 @@ namespace LogPulse.Api.Ingest;
 /// <summary>
 /// Stores batches sent by an agent. The server always comes from the agent's token, never from the payload,
 /// and its last-seen time uses the API's clock so a skewed agent clock cannot make it look online or offline.
+/// Once a batch is stored, dashboard viewers are told about it.
 /// </summary>
-public sealed class IngestService(IServerDao servers, ILogDao logs, IMetricDao metrics, TimeProvider time)
+public sealed class IngestService(IServerDao servers, ILogDao logs, IMetricDao metrics, ILiveUpdates live, TimeProvider time)
 {
     public async Task<int> IngestLogsAsync(string serverName, IngestLogBatch batch, CancellationToken cancellationToken = default)
     {
@@ -29,7 +31,9 @@ public sealed class IngestService(IServerDao servers, ILogDao logs, IMetricDao m
             })
             .ToList();
 
-        return await logs.InsertBatchAsync(entries, cancellationToken);
+        var stored = await logs.InsertBatchAsync(entries, cancellationToken);
+        await live.LogsStoredAsync(server, entries);
+        return stored;
     }
 
     public async Task<int> IngestMetricsAsync(string serverName, IngestMetricBatch batch, CancellationToken cancellationToken = default)
@@ -50,7 +54,9 @@ public sealed class IngestService(IServerDao servers, ILogDao logs, IMetricDao m
             })
             .ToList();
 
-        return await metrics.InsertBatchAsync(samples, cancellationToken);
+        var stored = await metrics.InsertBatchAsync(samples, cancellationToken);
+        await live.MetricsStoredAsync(server, samples);
+        return stored;
     }
 
     public const string UnknownSource = "unknown";

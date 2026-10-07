@@ -1,0 +1,21 @@
+@page "/error"
+@attribute [AllowAnonymous]
+@using System.Diagnostics
+
+<PageTitle>Error · LogPulse</PageTitle>
+
+<section class="card empty">
+    <h1>Something went wrong</h1>
+    <p>The error has been logged. <a href="">Back to the servers</a></p>
+    @if (RequestId is not null)
+    {
+        <p class="muted">Request id: <code>@RequestId</code></p>
+    }
+</section>
+
+@code {
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    private string? RequestId => Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

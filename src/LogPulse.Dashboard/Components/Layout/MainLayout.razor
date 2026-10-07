@@ -1,0 +1,32 @@
+@inherits LayoutComponentBase
+
+<header class="topbar">
+    <a class="brand" href="">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h4l3-7 4 14 3-7h6" /></svg>
+        LogPulse
+    </a>
+    <AuthorizeView>
+        <Authorized>
+            <nav class="nav" aria-label="Main">
+                <NavLink href="" Match="NavLinkMatch.All">Servers</NavLink>
+                <NavLink href="logs">Logs</NavLink>
+            </nav>
+            <div class="account">
+                <span class="account-name">@context.User.Identity?.Name</span>
+                <form method="post" action="@AccountEndpoints.LogoutPath.TrimStart('/')">
+                    <AntiforgeryToken />
+                    <button type="submit" class="button button-quiet">Log out</button>
+                </form>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+</header>
+
+<main class="content">
+    @Body
+</main>
+
+<div id="blazor-error-ui" role="alert">
+    Something went wrong and the page stopped updating.
+    <a href="" class="reload">Reload</a>
+</div>

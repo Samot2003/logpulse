@@ -9,12 +9,18 @@ argument-hint: "[número de hito]"
 Verifica el hito indicado en `$ARGUMENTS` (por ejemplo `/verificar 4`). Sin argumento, verifica el primer hito sin marcar (`## [ ] H…`) de `docs/ROADMAP.md`.
 
 ## Pasos
-1. **Lee `docs/ROADMAP.md`** y localiza la sección del hito: su línea `**Agentes:**`, sus casillas y su criterio de aceptación. Si el hito no existe o no tiene agentes, dilo y para.
+1. **Lee solo la sección del hito en `docs/ROADMAP.md`** (localízala con Grep y léela por rango): su línea `**Agentes:**`, sus casillas y su criterio de aceptación. Si el hito no existe o no tiene agentes, dilo y para.
 2. **Determina el alcance** para los revisores: los commits del hito (`git log --oneline`) más los cambios sin confirmar (`git status --short`). Si hay cambios sin confirmar, avisa de que también se revisan.
 3. **Lanza en paralelo, en un solo mensaje, una llamada al tool Agent por cada agente de la lista**, con `subagent_type` igual al nombre del agente (`qa-tester`, `code-reviewer`, `security-auditor`, `devops-verifier`, `api-tester`, `ui-tester`, `portfolio-reviewer`) y `run_in_background: false`. En el prompt de cada uno incluye:
    - Hito y objetivo (copia la sección del roadmap).
    - Alcance: rango de commits y archivos relevantes.
-   - Recordatorio: solo verificar e informar con su formato de respuesta, sin modificar archivos.
+   - Recordatorio: solo verificar e informar con su formato de respuesta (corto, como dice su sección "Brevedad"), sin modificar archivos.
+   - **Modelo:** todos los agentes usan Sonnet por defecto (frontmatter). Pasa `model: "opus"` solo al `security-auditor` en hitos de despliegue o secretos (H8), o si el usuario lo pide.
+
+   **Pasadas siguientes (2.ª en adelante), incrementales:**
+   - Relanza solo los agentes que dieron `FALLA` o `AVISOS` y cuyos hallazgos se hayan corregido; un agente con `OK` no se repite.
+   - En el prompt no copies la sección entera del hito. Indica que es una **pasada incremental** y pasa la lista de hallazgos corregidos (una línea cada uno) más los archivos tocados desde la pasada anterior (`git diff --stat`).
+   - Haz una pasada completa solo si la corrección cambió mucho código (por ejemplo, un rediseño).
 4. **Consolida** los resultados en una tabla:
 
    | Agente | Veredicto | Bloqueantes | Avisos |
@@ -25,6 +31,7 @@ Verifica el hito indicado en `$ARGUMENTS` (por ejemplo `/verificar 4`). Sin argu
 6. **Decide:**
    - Si hay algún `FALLA` o bloqueante: el hito **no** está terminado. Propón el orden de corrección. No marques nada en el roadmap.
    - Si todo es `OK` o `AVISOS`: el hito puede cerrarse. Marca `[x]` en las casillas cumplidas y en el título del hito en `docs/ROADMAP.md`, y enumera los avisos que quedan pendientes.
+   - **Dónde se apunta:** el historial de cada pasada (veredictos, bloqueantes y avisos corregidos) va en `docs/verification/HN.md`. En la sección del hito del roadmap quedan solo una línea de resultado, el enlace a ese archivo y los avisos que pasan a otros hitos.
 
 ## Reglas
 - Esta skill **nunca hace commit, merge ni push**. Marcar casillas en el roadmap no es un commit; el commit lo autoriza el usuario después.

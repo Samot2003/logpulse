@@ -25,11 +25,7 @@ Se aplica a todos los hitos, además de sus criterios propios:
 - [x] Esquema idempotente embebido (`Schema/001_initial.sql`) aplicado por `DatabaseInitializer`.
 - [x] Tests unitarios + integración con Testcontainers (SQL Server 2022).
 
-**Verificación (`/verificar 1`, 3 pasadas):** qa-tester AVISOS, security-auditor OK, code-reviewer AVISOS. Bloqueantes corregidos:
-- Desbordamiento del offset de paginación (ahora `LogQuery.Offset` en `long`).
-- Dependencias transitivas vulnerables de xunit 2.5.3 (actualizado a 2.9.3).
-- Búsqueda recortada que daba falsos positivos (ya no se recorta).
-- Edición de `001_initial.sql` publicado (excepción hasta `v1.0.0` decidida por el usuario y documentada en `CLAUDE.md`).
+**Historial de verificación:** [docs/verification/H1.md](verification/H1.md).
 
 ## [x] H2 — Harness de agentes verificadores
 **Agentes:** qa-tester, code-reviewer, security-auditor
@@ -60,9 +56,9 @@ Se aplica a todos los hitos, además de sus criterios propios:
 - [x] Badge visible en el README ("passing").
 - [x] Protección de `main` con un ruleset: PR obligatorio, los 5 checks del CI obligatorios (ligados a GitHub Actions), rama al día, sin borrado ni force push.
 
-**Aceptación:** run verde en GitHub y badge funcionando. ✅ Comprobado con la API pública de GitHub (push a `main` `595bc56` en verde, badge "passing", `main` protegida).
+**Historial de verificación:** [docs/verification/H3.md](verification/H3.md).
 
-**Verificación (`/verificar h3`):** qa-tester OK, devops-verifier AVISOS (con el repo aún privado no podía ver el CI remoto; después se comprobó con la API pública).
+**Aceptación:** run verde en GitHub y badge funcionando. ✅ Comprobado con la API pública de GitHub (push a `main` `595bc56` en verde, badge "passing", `main` protegida).
 
 ## [x] H4 — API ASP.NET Core
 **Agentes:** qa-tester, code-reviewer, security-auditor, api-tester
@@ -89,37 +85,6 @@ Se aplica a todos los hitos, además de sus criterios propios:
 - [x] `DatabaseInitializer` con `sp_getapplock` y limitado a los recursos `Schema.*.sql`.
 - [x] Renombrar `SqlServerDao`: **se mantiene**, porque es coherente con `SqlLogDao` y `SqlMetricDao` (prefijo `Sql` = implementación SQL Server) y la interfaz `IServerDao` deja claro el dominio.
 
-**`/verificar 4`, primera pasada:** api-tester AVISOS (~40 escenarios E2E en verde contra la API real), qa-tester AVISOS, code-reviewer FALLA, security-auditor FALLA. Bloqueantes corregidos:
-- [x] Carrera en la rotación de refresh tokens: el token rotado solo se inserta si su familia no está revocada (`TryInsertRotatedAsync`, comprobación e inserción atómicas con `UPDLOCK, HOLDLOCK`); tras el compare-and-set ya no se cancela a medias.
-- [x] Rotar la clave de un agente revoca sus sesiones; `DELETE /api/agents/{serverName}` revoca la credencial; sesiones con caducidad absoluta (`Jwt:MaxSessionDays`, 30 días).
-
-Avisos corregidos en la misma pasada: lote con elementos `null` → 400; líneas vacías aceptadas; timestamps futuros acotados a la hora de recepción; cuerpo de más de 4 MB → 413; `Retention:Interval` y `BatchSize` validados (lotes por debajo del umbral de escalado de bloqueos); opciones validadas antes de tocar la base de datos; la API no arranca fuera de Development con la clave JWT de desarrollo; timeout del applock; carrera en `CREATE DATABASE`; guardas en `SqlBatch`; constante de lote en el contrato de Data; test dependiente del orden; fakes con la semántica de la collation de SQL Server; `AgentsController` en su propio archivo; SQL Server publicado solo en `127.0.0.1` en la documentación.
-
-**`/verificar 4`, segunda pasada:** api-tester AVISOS, qa-tester AVISOS, security-auditor AVISOS (bloqueantes anteriores confirmados como corregidos), code-reviewer FALLA. Corregido:
-- [x] Bloqueante: carrera entre el login de un agente y la rotación de su clave. Primer intento con horas (`FamilyCreatedAt > CreatedAt`), descartado en la tercera pasada (ver abajo).
-- [x] MessagePack malformado → 400 (formatter propio en lugar del paquete `MessagePack.AspNetCoreMvcFormatter`).
-- [x] Perder el compare-and-set contra una revocación ya no se registra como reutilización.
-- [x] `/api/auth/*`: solo JSON y cuerpo de 16 KB como máximo.
-- [x] `serverName` de agentes restringido a caracteres seguros para URL.
-- [x] Cadena de conexión de desarrollo con `127.0.0.1` y reintentos al conectar con SQL Server durante el arranque (hasta ~1 min).
-- [x] Tests del 413, de opciones inválidas al arrancar, de timestamps futuros en métricas y de la carrera login/rotación.
-
-**`/verificar 4`, tercera pasada:** security-auditor AVISOS, code-reviewer FALLA. Corregido:
-- [x] Bloqueante: comparar horas no cerraba la carrera login/rotación (la rotación toma su hora antes de bloquear la fila). Ahora cada rotación incrementa atómicamente `AgentCredentials.KeyVersion`, la sesión guarda la versión de la fila cuya clave verificó (`RefreshTokens.SubjectVersion`) y el refresh exige que coincidan. No depende de relojes, de la precisión ni del nivel de aislamiento.
-- [x] DoS: el límite de 1000 elementos se aplica **durante** la deserialización (converter JSON y formatter MessagePack sobre el lote completo), no después de deserializar y validar millones de elementos. Cuarta pasada: también se rechazan las claves repetidas (`"entries"` dos veces) y los lotes con más de 8 claves, que permitían multiplicar el presupuesto de una petición.
-- [x] `/api/auth/*` sin `[Consumes]` (un content-type distinto da 415, no un 401 confuso); el formatter de MessagePack solo lee los lotes de ingesta.
-- [x] El seed valida nombres y roles con las mismas reglas que la API; los reintentos de arranque cubren también la base de datos de la aplicación, con un plazo total de 2 minutos.
-
-**`/verificar 4`, cuarta pasada:** code-reviewer AVISOS, security-auditor AVISOS. **Sin bloqueantes: H4 cerrado.** Corregido además:
-- [x] Claves repetidas en el lote (multiplicaban el presupuesto de elementos) y lotes con más de 8 claves → 400.
-- [x] MessagePack con claves en camelCase → 400 (antes 200 con entradas vacías: pérdida silenciosa de datos).
-- [x] MessagePack de más de 4 MB → 413 (la librería envolvía la excepción de Kestrel); un payload truncado sigue siendo 400.
-- [x] La ruta de los errores JSON vuelve a indicar qué elemento del lote falla (`$.entries[3].severity`).
-- [x] El seed valida el nombre del agente con el mismo atributo que la API (sin aceptar un salto de línea final).
-- [x] `TokenSubject.Version` obligatorio; el test de revocación aísla `IsActive`; tests de los nuevos límites y del formatter.
-
-**Aceptación:** flujo completo de auth, ingesta y consulta verificado por el api-tester contra la API levantada (pasadas 1 y 2, unos 40 escenarios). Los cambios posteriores están cubiertos por los tests de integración (107 tests en total).
-
 **Avisos que pasan a otros hitos:**
 - H5: el agente debe truncar con `FieldLimits` y partir los lotes por bytes (`IngestLimits.MaxRequestBytes`); sin reintentos automáticos en `/api/auth/refresh`.
 - H6: rate limit en la ingesta por agente (hoy solo limita el tamaño de cada petición).
@@ -127,6 +92,8 @@ Avisos corregidos en la misma pasada: lote con elementos `null` → 400; líneas
 - H6/H7: `UseForwardedHeaders` y partición del rate limit detrás de proxy o del dashboard (hoy por IP y compartido por todos los endpoints de auth); valorar límite por cuenta.
 - H6: ventana temporal por defecto o rate limit en `GET /api/logs` para consultas caras sin filtros.
 - H8: al desplegar, login de SQL con permisos mínimos (hoy la API crea la base de datos y aplica DDL al arrancar) y seed desactivado en producción.
+
+**Historial de verificación:** [docs/verification/H4.md](verification/H4.md).
 
 **Aceptación:** flujo completo de auth, ingesta y consulta verificado por api-tester contra la API levantada.
 
@@ -144,40 +111,34 @@ Avisos corregidos en la misma pasada: lote con elementos `null` → 400; líneas
 - [x] El agente trunca con `FieldLimits` (`FieldLimits.Truncate`, compartido con la API) y parte los lotes por bytes (estimación con cota superior comprobada en tests).
 - [x] Sin reintentos automáticos en `/api/auth/refresh`.
 
-**`/verificar 5`, primera pasada:** qa-tester FALLA, code-reviewer FALLA, security-auditor FALLA. Bloqueantes corregidos:
-- [x] `.gitignore` ignoraba la carpeta de código `Logs/` (la regla `logs/` del log de desarrollo coincide sin distinguir mayúsculas en Windows): el log de desarrollo pasa a `dev-logs/`.
-- [x] La posición inicial de un archivo sin checkpoint no se guardaba: un reinicio antes del primer lote confirmado saltaba lo escrito mientras tanto. Ahora se guarda al abrirlo (o en el byte 0 si aún no existe), sin pisar una posición conocida.
-- [x] Instalación como servicio del README insegura (API key en el registro, legible por usuarios locales; LocalSystem en una carpeta modificable por cualquier usuario autenticado). Ahora: `Program Files`, cuenta virtual `NT SERVICE\LogPulseAgent`, estado en `ProgramData` con ACL propia y la clave en `appsettings.Production.json` legible solo por el servicio y los administradores.
-
-Avisos corregidos en la misma pasada: ninguna excepción inesperada para el host (envío, archivo ilegible, checkpoint manipulado); 413 parte el lote por la mitad en lugar de descartarlo y 415 se reintenta; las métricas salen antes de cada lote de logs; timeouts de Polly a medida de lotes grandes y `MaxBatchBytes` por defecto de 512 KB (por debajo del límite habitual de nginx); la publicación solo incluye `appsettings.json` (lista blanca); cabecera `Authorization` redactada en los logs de `HttpClient`; respuesta 200 que no es el JSON de la API → reintentar; sin `!` injustificados; arrancar por el final no corta una línea a medio escribir; checkpoint escrito sin seguir enlaces plantados en el temporal. Tests nuevos: posición inicial, alineación de línea, checkpoint manipulado, regla de muestreo ociosa, partición por 413, prioridad de métricas y el cableado real de DI (401 → renovación y reenvío; login y refresh sin reintentos).
-
-**`/verificar 5`, segunda pasada:** qa-tester AVISOS, code-reviewer AVISOS, security-auditor FALLA (bloqueantes de la primera pasada confirmados como resueltos). Corregido:
-- [x] Bloqueante: el script del README daba a `icacls` nombres de grupo en inglés (`Administrators`), que no existen en un Windows en otro idioma; el comando fallaba en silencio y la clave quedaba legible. Ahora usa SIDs (`*S-1-5-32-544`, `*S-1-5-18`), se detiene en el primer fallo (`$ErrorActionPreference` y `$LASTEXITCODE`), restringe el archivo antes de escribir la clave (pedida con `Read-Host`, fuera del historial), fija el propietario de la carpeta de estado, registra el origen del Event Log y exige que las carpetas de los logs solo sean modificables por administradores.
-
-Avisos corregidos: las métricas aceptadas ya no reinician el contador de fallos mientras un lote de logs sigue fallando; checkpoint con `Flush(flushToDisk: true)` antes del rename; como mucho 1 MB por archivo y sondeo (un backlog no bloquea los demás archivos); el cliente de ingesta deja los timeouts a Polly (`HttpClient.Timeout` infinito); una carpeta inexistente (volumen sin montar) no se trata como archivo nuevo; un fallo de disco envía el último valor conocido en lugar de perder CPU y memoria; fallos de muestreo registrados una vez por racha; excepciones inesperadas del envío siempre registradas; `mkdir` de `dev-logs` en el README. Tests nuevos: bucles reales del tailer (reparto entre archivos, posiciones iniciales) y del sampler (sigue tras un fallo), carpeta inexistente, contador de fallos y bordes de `Truncate`.
-
-**`/verificar 5`, tercera pasada:** qa-tester OK, code-reviewer AVISOS, security-auditor AVISOS. **Sin bloqueantes: H5 cerrado.** El security-auditor comprobó en este Windows es-ES que los SID funcionan donde `"Administrators"` falla (exit 1332) y que `Set-Content` conserva la ACL del archivo ya restringido. Corregido además:
-- [x] El tope de 1 MB por archivo y sondeo limitaba la velocidad a 1 MB/s por archivo: mientras quede backlog se hace otra ronda inmediata (round-robin) en vez de esperar al siguiente tick.
-- [x] `HttpClient.Timeout` del cliente de ingesta finito (5 min, por encima del peor caso de Polly): la lectura del cuerpo de la respuesta queda fuera de la pipeline y no puede colgarse para siempre.
-- [x] Un archivo de posiciones ilegible ya no impide arrancar (se trata como dañado).
-- [x] Script de instalación: un único bloque `& { }` (se detiene en el primer fallo aunque se pegue línea a línea), servicio en Manual hasta el final, comprobación de que la carpeta de estado está vacía, clave con `Read-Host -AsSecureString`, solo se copian el `.exe` y `appsettings.json` (publicado sin elevar), pasos para deshacer una instalación a medias. Sintaxis comprobada con el parser de PowerShell 5.1.
-- [x] Nombre del servicio coherente (`LogPulseAgent`) y origen del Event Log registrado para él; ajustes que faltaban en la tabla del README.
-
 **Avisos que pasan a otros hitos:**
 - H6: `IngestResult.ViewersOnline` dirá a cualquier token de agente si alguien mira el dashboard; valorar si es aceptable al conectarlo a SignalR. Sigue pendiente el rate limit de ingesta por agente.
 - H7: en compose el agente hablará con `http://api:...`, que no es loopback, y `AgentStartupChecks` lo rechazará fuera de Development: decidir entre TLS interno o un entorno propio. Documentar la instalación del agente en Linux.
 - Pendiente (sin hito concreto): validar `DiskPath` al arrancar (si el disco no se puede leer desde la primera muestra no se envían métricas); comprobar en el tailer que la ruta final del handle coincide con la configurada (hoy se documenta que las carpetas de logs no deben ser modificables por usuarios); test del `catch` de `IngestSender.ExecuteAsync`. Límites documentados: una entrada por línea física y hora de lectura como timestamp.
 
+**Historial de verificación:** [docs/verification/H5.md](verification/H5.md).
+
 **Aceptación:** un agente local aparece en `/api/servers` y sus logs y métricas se pueden consultar. ✅ Comprobado en local con la API y el agente en Development: `demo-server` aparece, las líneas añadidas a `dev-logs/demo.log` llegan con su severidad (Error, Warning) y hay una muestra de métricas cada 5 s.
 
-## [ ] H6 — Dashboard en tiempo real
+## [x] H6 — Dashboard en tiempo real
 **Agentes:** qa-tester, code-reviewer, ui-tester
-- [ ] `src/LogPulse.Dashboard` (Blazor Server) que consume la API con JWT.
-- [ ] Hub SignalR `/hubs/live` (rol `Viewer`) y `ViewerTracker`.
-- [ ] Páginas: login, resumen de servidores, detalle con gráficas y visor de logs con filtros, paginación y modo "seguir en vivo".
-- [ ] Tests de componentes con bUnit.
+- [x] `src/LogPulse.Dashboard` (Blazor Server) que consume la API con JWT: backend-for-frontend, con el JWT y el refresh token en una sesión del servidor (el navegador solo recibe una cookie cifrada `HttpOnly`, `SameSite=Strict`, con el id de sesión), renovación única por sesión (los refresh tokens son de un solo uso) y logout con antiforgery que revoca el refresh token.
+- [x] Hub SignalR `/hubs/live` (rol `Viewer`) y `ViewerTracker`: avisa de cada lote guardado (resumen de logs, métricas completas) y alimenta `IngestResult.ViewersOnline`. Las conexiones se cierran al caducar su token.
+- [x] Páginas: login, resumen de servidores, detalle con gráficas y visor de logs con filtros, paginación y modo "seguir en vivo".
+- [x] Tests de componentes con bUnit.
 
-**Aceptación:** ui-tester ve llegar datos en vivo sin errores en la consola.
+**Avisos de H4/H5 que se resuelven aquí:**
+- [x] Rate limit de ingesta por agente y de consultas por usuario (429 con `Retry-After`).
+- [x] `X-Forwarded-For` desde proxies de confianza: el dashboard reenvía la IP de cada usuario y el rate limit de auth deja de ser compartido por todos.
+- [x] `IngestResult.ViewersOnline` conectado a SignalR. Exposición aceptada: es un solo bit, solo lo reciben agentes autenticados y es lo que permite bajar la frecuencia de muestreo.
+
+**Avisos que pasan a otros hitos:**
+- H7: el dashboard en compose hablará con `http://api:...` (como el agente, `DashboardStartupChecks` lo rechazará fuera de Development); añadir la IP del dashboard a `ForwardedHeaders:KnownProxies` de la API; claves de Data Protection persistentes en el contenedor.
+- Pendiente (sin hito concreto): tests directos de la reconexión de `LiveFeed` (backoff tras `StartAsync` fallido, `Closed` por caducidad del token, token rechazado) con un hub caído y `FakeTimeProvider`; tests bUnit de la página de login (429, API caída, validación); tests de integración con sondeo y plazo fijo de 15 s; `PersistentComponentState` para no repetir consultas al prerenderizar; dejar de contar como viewer una pestaña cerrada sin logout antes de los ~3 min de retención de circuitos de Blazor (`CircuitHandler`).
+
+**Historial de verificación:** [docs/verification/H6.md](verification/H6.md).
+
+**Aceptación:** ui-tester ve llegar datos en vivo sin errores en la consola. ✅ Primera pasada: datos en vivo correctos y consola limpia, con el bloqueante de las fechas; segunda pasada: todo OK. Comprobado también en local con la API, el agente y el dashboard: el agente registra "Dashboard viewers online: True" con el dashboard abierto y vuelve a False al cerrar sesión.
 
 ## [ ] H7 — Docker
 **Agentes:** devops-verifier, api-tester, ui-tester

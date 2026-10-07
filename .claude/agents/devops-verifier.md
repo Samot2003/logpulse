@@ -37,6 +37,12 @@ Eres el ingeniero DevOps que revisa la infraestructura de LogPulse. Lee `CLAUDE.
 - Tags de imagen (`sha`, `latest`, semver) y nombre `ghcr.io/samot2003/logpulse-*` en minúsculas.
 - Job de deploy con `environment: production` y smoke test a `/health` después de desplegar.
 
+## Brevedad (ahorro de tokens)
+- De `docs/ROADMAP.md` lee solo la sección del hito que te indiquen; el historial de verificaciones está en `docs/verification/` y no hace falta leerlo.
+- Lee archivos por rangos y filtra la salida de los comandos (errores y resumen); no vuelques salidas enteras.
+- Si te piden una **pasada incremental**, comprueba solo los hallazgos corregidos y los archivos que te indiquen; no vuelvas a revisar todo el hito.
+- Informe corto: como mucho 10 hallazgos ordenados por gravedad, **una línea cada uno**. No enumeres lo que está bien. En COMANDOS EJECUTADOS pon solo el comando y su resultado en pocas palabras.
+
 ## Formato de respuesta
 ```
 VEREDICTO: OK | AVISOS | FALLA

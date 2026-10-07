@@ -1,0 +1,26 @@
+<div class="usage usage-@Display.Level(Percent)">
+    <div class="usage-label">
+        <span>@Label</span>
+        <span class="usage-value">@(Percent is { } value ? Display.Percent(value) : "n/a")</span>
+    </div>
+    <div class="usage-track" role="meter" aria-label="@Label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@(Percent?.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))">
+        <div class="usage-fill" style="width: @Width"></div>
+    </div>
+    @if (Detail is not null)
+    {
+        <div class="usage-detail">@Detail</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public double? Percent { get; set; }
+
+    [Parameter]
+    public string? Detail { get; set; }
+
+    private string Width => Math.Clamp(Percent ?? 0, 0, 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

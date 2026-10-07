@@ -1,0 +1,59 @@
+@if (Entries.Count == 0)
+{
+    <p class="muted empty-logs">@EmptyText</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table class="logs">
+            <thead>
+                <tr>
+                    <th scope="col" class="col-time">Time (UTC)</th>
+                    @if (ServerNames is not null)
+                    {
+                        <th scope="col">Server</th>
+                    }
+                    <th scope="col">Severity</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Entries)
+                {
+                    <tr @key="entry.Id" class="log-@Display.SeverityClass(entry.Severity)">
+                        <td class="col-time">@Display.Time(entry.Timestamp)</td>
+                        @if (ServerNames is not null)
+                        {
+                            <td><a href="servers/@entry.ServerId">@ServerNames.GetValueOrDefault(entry.ServerId, $"#{entry.ServerId}")</a></td>
+                        }
+                        <td><SeverityBadge Severity="entry.Severity" /></td>
+                        <td class="col-source">@entry.Source</td>
+                        <td class="col-message">
+                            @entry.Message
+                            @if (entry.Exception is { Length: > 0 } exception)
+                            {
+                                <details>
+                                    <summary>Exception</summary>
+                                    <pre>@exception</pre>
+                                </details>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<LogEntry> Entries { get; set; } = [];
+
+    /// <summary>Server names by id; when set, a Server column is shown.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<int, string>? ServerNames { get; set; }
+
+    [Parameter]
+    public string EmptyText { get; set; } = "No log entries.";
+}

@@ -19,9 +19,24 @@ public class IngestServiceTests
     private readonly InMemoryServerDao _servers = new();
     private readonly RecordingLogDao _logs = new();
     private readonly RecordingMetricDao _metrics = new();
+    private readonly RecordingLiveUpdates _live = new();
     private readonly IngestService _ingest;
 
-    public IngestServiceTests() => _ingest = new IngestService(_servers, _logs, _metrics, _time);
+    public IngestServiceTests() => _ingest = new IngestService(_servers, _logs, _metrics, _live, _time);
+
+    [Fact]
+    public async Task Viewers_are_told_about_stored_batches_with_the_server_and_its_new_last_seen_time()
+    {
+        await _ingest.IngestLogsAsync("web-01", new IngestLogBatch { Entries = [new IngestLogEntry { Timestamp = Now, Source = "a", Message = "m" }] });
+        await _ingest.IngestMetricsAsync("web-01", new IngestMetricBatch { Samples = [new IngestMetricSample { Timestamp = Now, CpuPercent = 5 }] });
+
+        var (logServer, entries) = Assert.Single(_live.Logs);
+        Assert.Equal(("web-01", Now), (logServer.Name, logServer.LastSeenAt));
+        Assert.Equal(_logs.Inserted, entries);
+        var (metricServer, samples) = Assert.Single(_live.Metrics);
+        Assert.Equal(logServer.Id, metricServer.Id);
+        Assert.Equal(_metrics.Inserted, samples);
+    }
 
     [Fact]
     public async Task Logs_are_stored_for_the_authenticated_server_and_last_seen_uses_the_api_clock()

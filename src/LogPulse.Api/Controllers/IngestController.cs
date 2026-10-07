@@ -3,12 +3,14 @@ using LogPulse.Api.Ingest;
 using LogPulse.Core.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LogPulse.Api.Controllers;
 
 [ApiController]
 [Route("api/ingest")]
 [Authorize(Policy = Policies.Ingest)]
+[EnableRateLimiting(Policies.IngestRateLimit)]
 [Consumes("application/json", MessagePackInputFormatter.MediaType)]
 [Produces("application/json")]
 [RequestSizeLimit(IngestLimits.MaxRequestBytes)]

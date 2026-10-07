@@ -1,0 +1,32 @@
+<article class="card server-card @(Online ? "is-online" : "is-offline")">
+    <header class="server-card-header">
+        <a class="server-name" href="servers/@Server.Id">@Server.Name</a>
+        <span class="status @(Online ? "status-online" : "status-offline")">@(Online ? "Online" : "Offline")</span>
+    </header>
+    <p class="server-seen">Last seen @Display.Ago(Server.LastSeenAt, Now)</p>
+    @if (Latest is { } sample)
+    {
+        <UsageBar Label="CPU" Percent="sample.CpuPercent" />
+        <UsageBar Label="Memory" Percent="Display.MemoryPercent(sample)"
+                  Detail="@($"{Display.Gigabytes(sample.MemoryUsedMb)} of {Display.Gigabytes(sample.MemoryTotalMb)}")" />
+        <UsageBar Label="Disk" Percent="sample.DiskUsedPercent" />
+    }
+    else
+    {
+        <p class="muted">No metrics yet.</p>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public Server Server { get; set; } = default!;
+
+    [Parameter]
+    public MetricSample? Latest { get; set; }
+
+    [Parameter]
+    public bool Online { get; set; }
+
+    [Parameter]
+    public DateTimeOffset Now { get; set; }
+}

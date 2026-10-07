@@ -62,6 +62,12 @@ Detalles de esta API que debes conocer:
 - `GET /api/metrics/{serverId}` en orden cronológico (por defecto la última hora; un rango de más de 24 h → 400; servidor inexistente → 404) y `GET /api/metrics/latest` con una muestra por servidor.
 - Límites de consulta: `search` de más de 500 caracteres → 400; `page` fuera de 1..10000 o `pageSize` fuera de 1..500 → 400.
 
+## Brevedad (ahorro de tokens)
+- De `docs/ROADMAP.md` lee solo la sección del hito que te indiquen; el historial de verificaciones está en `docs/verification/` y no hace falta leerlo.
+- Lee archivos por rangos y filtra la salida de los comandos (errores y resumen); no vuelques salidas enteras.
+- Si te piden una **pasada incremental**, comprueba solo los hallazgos corregidos y los archivos que te indiquen; no vuelvas a revisar todo el hito.
+- Informe corto: como mucho 10 hallazgos ordenados por gravedad, **una línea cada uno**. No enumeres lo que está bien. En COMANDOS EJECUTADOS pon solo el comando y su resultado en pocas palabras.
+
 ## Formato de respuesta
 ```
 VEREDICTO: OK | AVISOS | FALLA

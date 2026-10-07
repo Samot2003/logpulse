@@ -1,0 +1,196 @@
+@page "/servers/{ServerId:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits LivePageBase
+@inject ILogPulseApi Api
+
+<PageTitle>@(_server?.Name ?? "Server") · LogPulse</PageTitle>
+
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="">Servers</a> <span aria-hidden="true">/</span> @(_server?.Name ?? "…")</nav>
+
+<div class="page-header">
+    <div>
+        <h1>@(_server?.Name ?? "Server")</h1>
+        @if (_server is not null)
+        {
+            var online = Time.GetUtcNow() - _server.LastSeenAt <= Options.Value.OfflineAfter;
+            <p class="muted">
+                <span class="status @(online ? "status-online" : "status-offline")">@(online ? "Online" : "Offline")</span>
+                Last seen @Display.Ago(_server.LastSeenAt, Time.GetUtcNow()) · reporting since @Display.Time(_server.RegisteredAt) UTC
+            </p>
+        }
+    </div>
+    <LiveIndicator Status="Feed.Status" />
+</div>
+
+<ErrorNotice Message="@Error" OnRetry="LoadAsync" />
+
+@if (_notFound)
+{
+    <div class="card empty">
+        <h2>Server not found</h2>
+        <p>No server with this id has reported. <a href="">Back to the servers</a></p>
+    </div>
+}
+else if (_server is not null)
+{
+    <div class="toolbar" role="group" aria-label="Time range">
+        @foreach (var (label, range) in Ranges)
+        {
+            <button type="button" class="chip @(range == _range ? "is-active" : "")" aria-pressed="@(range == _range ? "true" : "false")"
+                    @onclick="() => SetRangeAsync(range)">@label</button>
+        }
+    </div>
+
+    <div class="charts">
+        <LineChart Title="CPU" Tone="cpu" Points="_cpu" From="ChartFrom" To="ChartTo" Gap="Options.Value.OfflineAfter" />
+        <LineChart Title="Memory" Tone="memory" Points="_memory" From="ChartFrom" To="ChartTo" Gap="Options.Value.OfflineAfter" />
+        <LineChart Title="Disk" Tone="disk" Points="_disk" From="ChartFrom" To="ChartTo" Gap="Options.Value.OfflineAfter" />
+    </div>
+
+    <section class="card">
+        <header class="card-header">
+            <h2>Recent logs</h2>
+            <a href="logs?serverId=@ServerId">Open in the log viewer</a>
+        </header>
+        <LogTable Entries="_recentLogs" EmptyText="This server has not sent any log entries yet." />
+    </section>
+}
+
+@code {
+    private const int RecentLogCount = 10;
+
+    private static readonly (string Label, TimeSpan Range)[] Ranges =
+    [
+        ("15 min", TimeSpan.FromMinutes(15)),
+        ("1 hour", TimeSpan.FromHours(1)),
+        ("6 hours", TimeSpan.FromHours(6)),
+        ("24 hours", TimeSpan.FromHours(24)),
+    ];
+
+    private Server? _server;
+    private bool _notFound;
+    private TimeSpan _range = TimeSpan.FromHours(1);
+    private List<MetricSample> _samples = [];
+    private IReadOnlyList<ChartPoint> _cpu = [];
+    private IReadOnlyList<ChartPoint> _memory = [];
+    private IReadOnlyList<ChartPoint> _disk = [];
+    private IReadOnlyList<LogEntry> _recentLogs = [];
+    private RefreshThrottle? _logsThrottle;
+    private ITimer? _clock;
+    private int _metricLoads;
+
+    [Parameter]
+    public int ServerId { get; set; }
+
+    private DateTimeOffset ChartTo => Time.GetUtcNow();
+
+    private DateTimeOffset ChartFrom => ChartTo - _range;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _logsThrottle ??= new RefreshThrottle(Options.Value.LiveRefreshInterval, Time, () =>
+        {
+            RunOnDispatcher(() => TryLoadAsync(LoadRecentLogsAsync, clearsError: false));
+            return Task.CompletedTask;
+        });
+        await LoadAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        base.OnAfterRender(firstRender);
+        if (firstRender)
+        {
+            // Keeps the charts' time window and "last seen" moving even when the server stops reporting.
+            _clock = Time.CreateTimer(_ => RunOnDispatcher(() => Task.CompletedTask), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+        }
+    }
+
+    private Task LoadAsync() => TryLoadAsync(async () =>
+    {
+        _server = (await Api.GetServersAsync()).FirstOrDefault(s => s.Id == ServerId);
+        _notFound = _server is null;
+        if (_server is null)
+        {
+            return;
+        }
+
+        await LoadMetricsAsync();
+        await LoadRecentLogsAsync();
+    });
+
+    private async Task LoadMetricsAsync()
+    {
+        // Switching ranges quickly overlaps requests: only the latest one may fill the charts.
+        var load = ++_metricLoads;
+        var to = Time.GetUtcNow();
+        var samples = await Api.GetMetricsAsync(ServerId, to - _range, to);
+        if (load == _metricLoads)
+        {
+            _samples = [.. samples];
+            RebuildPoints();
+        }
+    }
+
+    private async Task LoadRecentLogsAsync() =>
+        _recentLogs = (await Api.GetLogsAsync(new LogQuery { ServerId = ServerId, PageSize = RecentLogCount })).Items;
+
+    private async Task SetRangeAsync(TimeSpan range)
+    {
+        _range = range;
+        await TryLoadAsync(LoadMetricsAsync, clearsError: false);
+    }
+
+    protected override Task OnMetricsReceivedAsync(MetricsReceivedEvent received)
+    {
+        if (_server is null || received.ServerId != ServerId)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (received.LastSeenAt > _server.LastSeenAt)
+        {
+            _server = _server with { LastSeenAt = received.LastSeenAt };
+        }
+
+        // Append what is newer than the chart already has and drop what slid out of the window.
+        var newest = _samples.Count > 0 ? _samples[^1].Timestamp : DateTimeOffset.MinValue;
+        _samples.AddRange(received.Samples.Where(s => s.Timestamp > newest).OrderBy(s => s.Timestamp));
+        _samples.RemoveAll(s => s.Timestamp < ChartFrom);
+        RebuildPoints();
+        return Task.CompletedTask;
+    }
+
+    protected override Task OnLogsReceivedAsync(LogsReceivedEvent received)
+    {
+        if (_server is not null && received.ServerId == ServerId)
+        {
+            _server = received.LastSeenAt > _server.LastSeenAt ? _server with { LastSeenAt = received.LastSeenAt } : _server;
+            _logsThrottle?.Request();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    protected override Task OnReconnectedAsync() => LoadAsync();
+
+    private void RebuildPoints()
+    {
+        _cpu = [.. _samples.Select(s => new ChartPoint(s.Timestamp, s.CpuPercent))];
+        // Samples without a memory total have no percentage: they are left out instead of drawn as 0 %.
+        _memory = [.. _samples.Select(s => (s.Timestamp, Percent: Display.MemoryPercent(s))).Where(s => s.Percent is not null).Select(s => new ChartPoint(s.Timestamp, s.Percent ?? 0))];
+        _disk = [.. _samples.Select(s => new ChartPoint(s.Timestamp, s.DiskUsedPercent))];
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _clock?.Dispose();
+            _logsThrottle?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}
