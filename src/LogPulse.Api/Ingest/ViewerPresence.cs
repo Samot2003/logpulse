@@ -7,10 +7,18 @@ public interface IViewerPresence
 }
 
 /// <summary>
-/// Used until the live dashboard tracks its connections: it reports that someone is always watching, so agents
-/// keep sampling at full frequency.
+/// Counts the open connections to the live hub. Each open dashboard page holds one, so a count above zero
+/// means someone is watching and agents should sample at full frequency.
 /// </summary>
-public sealed class AlwaysWatchedPresence : IViewerPresence
+public sealed class ViewerTracker : IViewerPresence
 {
-    public bool AnyViewers => true;
+    private int _connections;
+
+    public int Connections => Volatile.Read(ref _connections);
+
+    public bool AnyViewers => Connections > 0;
+
+    public void Connected() => Interlocked.Increment(ref _connections);
+
+    public void Disconnected() => Interlocked.Decrement(ref _connections);
 }

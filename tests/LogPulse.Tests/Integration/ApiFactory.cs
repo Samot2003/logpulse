@@ -10,7 +10,8 @@ public sealed class ApiFactory(
     string connectionString,
     int authPermitsPerMinute = 10_000,
     string signingKey = "integration-test-signing-key-0123456789abcdef",
-    IReadOnlyDictionary<string, string?>? extraSettings = null) : WebApplicationFactory<Program>
+    IReadOnlyDictionary<string, string?>? extraSettings = null,
+    Action<IWebHostBuilder>? configure = null) : WebApplicationFactory<Program>
 {
     public const string AdminUser = "it-admin";
     public const string AdminPassword = "it-admin-password";
@@ -28,6 +29,8 @@ public sealed class ApiFactory(
             ["ConnectionStrings:LogPulse"] = connectionString,
             ["Jwt:SigningKey"] = signingKey,
             ["RateLimiting:AuthPermitsPerMinute"] = authPermitsPerMinute.ToString(CultureInfo.InvariantCulture),
+            ["RateLimiting:IngestPermitsPerMinute"] = "100000",
+            ["RateLimiting:ReadPermitsPerMinute"] = "100000",
             ["Retention:Enabled"] = "false",
             ["Seed:Users:0:UserName"] = AdminUser,
             ["Seed:Users:0:Password"] = AdminPassword,
@@ -38,5 +41,6 @@ public sealed class ApiFactory(
             ["Seed:Agents:0:ServerName"] = SeededAgentServer,
             ["Seed:Agents:0:ApiKey"] = SeededAgentKey,
         }).AddInMemoryCollection(extraSettings ?? new Dictionary<string, string?>()));
+        configure?.Invoke(builder);
     }
 }

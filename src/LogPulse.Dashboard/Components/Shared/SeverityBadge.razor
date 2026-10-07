@@ -1,0 +1,6 @@
+<span class="severity severity-@Display.SeverityClass(Severity)">@Severity</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public LogSeverity Severity { get; set; }
+}

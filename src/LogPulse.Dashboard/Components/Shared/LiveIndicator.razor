@@ -1,0 +1,18 @@
+<span class="live live-@Status.ToString().ToLowerInvariant()" role="status" title="Connection to the API's live updates">
+    <span class="live-dot" aria-hidden="true"></span>@Text
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public LiveStatus Status { get; set; }
+
+    private string Text => Status switch
+    {
+        LiveStatus.Live => "Live",
+        LiveStatus.Connecting => "Connecting…",
+        LiveStatus.Reconnecting => "Reconnecting…",
+        LiveStatus.Offline => "Live updates offline, retrying",
+        LiveStatus.SessionExpired => "Session expired",
+        _ => Status.ToString(),
+    };
+}

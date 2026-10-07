@@ -1,0 +1,315 @@
+@page "/logs"
+@using System.Globalization
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits LivePageBase
+@inject ILogPulseApi Api
+
+<PageTitle>Logs · LogPulse</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Logs</h1>
+        @if (_result is not null)
+        {
+            <p class="muted">@Summary</p>
+        }
+    </div>
+    <LiveIndicator Status="Feed.Status" />
+</div>
+
+<form class="filters card" @onsubmit="Apply" @onsubmit:preventDefault aria-label="Log filters">
+    <label class="field">
+        <span>Server</span>
+        <select @bind="_serverFilter">
+            <option value="">All servers</option>
+            @foreach (var server in _servers)
+            {
+                <option value="@server.Id">@server.Name</option>
+            }
+        </select>
+    </label>
+    <label class="field">
+        <span>Minimum severity</span>
+        <select @bind="_severityFilter">
+            <option value="">Any</option>
+            @foreach (var severity in Enum.GetValues<LogSeverity>())
+            {
+                <option value="@severity">@severity</option>
+            }
+        </select>
+    </label>
+    <label class="field field-wide">
+        <span>Search in messages</span>
+        <input type="search" @bind="_searchFilter" maxlength="@MaxSearchLength" placeholder="e.g. timeout" />
+    </label>
+    <label class="field">
+        <span>From (UTC)</span>
+        <input type="datetime-local" value="@_fromFilter" @onchange="change => _fromFilter = change.Value as string" />
+    </label>
+    <label class="field">
+        <span>To (UTC)</span>
+        <input type="datetime-local" value="@_toFilter" @onchange="change => _toFilter = change.Value as string" />
+    </label>
+    <div class="filter-actions">
+        <button type="submit" class="button">Apply</button>
+        <button type="button" class="button button-quiet" @onclick="Reset">Reset</button>
+    </div>
+</form>
+
+<ErrorNotice Message="@Error" OnRetry="LoadAsync" />
+
+<div class="toolbar">
+    <label class="toggle" title="@(CanFollow ? "Reload the first page when new entries arrive" : "Only on the first page and without a 'To' date")">
+        <input type="checkbox" checked="@(_follow && CanFollow)" disabled="@(!CanFollow)" @onchange="ToggleFollow" />
+        Follow live
+    </label>
+    @if (_newEntries)
+    {
+        <div class="notice notice-inline" role="status">
+            New entries have arrived.
+            <button type="button" class="button button-quiet" @onclick="ShowNewestAsync">Show the newest</button>
+        </div>
+    }
+</div>
+
+@if (_result is not null)
+{
+    @if (_result.Items.Count == 0 && _result.TotalCount > 0)
+    {
+        <div class="notice" role="status">
+            This page is past the last one.
+            <button type="button" class="button button-quiet" @onclick="() => GoToPage(LastPage)">Go to the last page</button>
+        </div>
+    }
+    else
+    {
+        <LogTable Entries="_result.Items" ServerNames="_serverNames" EmptyText="No log entries match these filters." />
+    }
+
+    @if (LastPage > 1)
+    {
+        <nav class="pager" aria-label="Pages">
+            <button type="button" class="button button-quiet" disabled="@(_query.Page <= 1)" @onclick="() => GoToPage(_query.Page - 1)">Newer</button>
+            <span>Page @_query.Page.ToString("N0", CultureInfo.InvariantCulture) of @LastPage.ToString("N0", CultureInfo.InvariantCulture)</span>
+            <button type="button" class="button button-quiet" disabled="@(_query.Page >= LastPage)" @onclick="() => GoToPage(_query.Page + 1)">Older</button>
+        </nav>
+    }
+}
+else if (Error is null)
+{
+    <p class="muted">Loading…</p>
+}
+
+@code {
+    public const int PageSize = 50;
+
+    /// <summary>Same limits as the API's query parameters: longer searches and deeper pages are rejected there.</summary>
+    public const int MaxSearchLength = 500;
+
+    public const int MaxPage = 10_000;
+
+    private const string DateInputFormat = "yyyy-MM-ddTHH:mm";
+
+    private LogQuery _query = new() { PageSize = PageSize };
+    private PagedResult<LogEntry>? _result;
+    private List<Server> _servers = [];
+    private Dictionary<int, string> _serverNames = [];
+    private bool _follow = true;
+    private bool _newEntries;
+    private RefreshThrottle? _throttle;
+    private int _loads;
+
+    private string _serverFilter = string.Empty;
+    private string _severityFilter = string.Empty;
+    private string? _searchFilter;
+
+    // Kept as the inputs' text and parsed here: the browser sends "yyyy-MM-ddTHH:mm" (or with seconds).
+    private string? _fromFilter;
+    private string? _toFilter;
+
+    // The query string is the source of truth for the filters, so a filtered view is a link that can be shared.
+    [SupplyParameterFromQuery(Name = "serverId")]
+    public int? ServerIdParameter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "minSeverity")]
+    public string? MinSeverityParameter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "search")]
+    public string? SearchParameter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "from")]
+    public string? FromParameter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "to")]
+    public string? ToParameter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? PageParameter { get; set; }
+
+    /// <summary>Live mode only makes sense on the newest entries: page 1 without an upper time bound.</summary>
+    private bool CanFollow => _query.Page == 1 && _query.To is null;
+
+    private long LastPage => Math.Min(_result?.TotalPages ?? 1, MaxPage);
+
+    private string Summary => _result is { TotalCount: > 0, Items.Count: > 0 } result
+        ? string.Create(CultureInfo.InvariantCulture,
+            $"{(long)(result.Page - 1) * result.PageSize + 1:N0}–{(long)(result.Page - 1) * result.PageSize + result.Items.Count:N0} of {result.TotalCount:N0} entries, newest first")
+        : _result is { TotalCount: > 0 } ? $"{_result.TotalCount:N0} entries" : "No entries";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _throttle ??= new RefreshThrottle(Options.Value.LiveRefreshInterval, Time, () =>
+        {
+            RunOnDispatcher(LoadAsync);
+            return Task.CompletedTask;
+        });
+
+        _query = new LogQuery
+        {
+            ServerId = ServerIdParameter,
+            MinSeverity = ParseSeverity(MinSeverityParameter),
+            Search = string.IsNullOrWhiteSpace(SearchParameter) ? null : SearchParameter.Trim(),
+            From = ParseUtc(FromParameter),
+            To = EndOfMinute(ParseUtc(ToParameter)),
+            Page = Math.Clamp(PageParameter ?? 1, 1, MaxPage),
+            PageSize = PageSize,
+        };
+        _serverFilter = _query.ServerId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        _severityFilter = _query.MinSeverity?.ToString() ?? string.Empty;
+        _searchFilter = _query.Search;
+        _fromFilter = ParseUtc(FromParameter)?.ToString(DateInputFormat, CultureInfo.InvariantCulture);
+        _toFilter = ParseUtc(ToParameter)?.ToString(DateInputFormat, CultureInfo.InvariantCulture);
+        _newEntries = false;
+
+        if (_servers.Count == 0)
+        {
+            await TryLoadAsync(LoadServersAsync, clearsError: false);
+        }
+
+        if (_query.From > _query.To)
+        {
+            _loads++; // a load still running must not fill the table behind this message
+            _result = null;
+            Error = "'From' must be earlier than 'To'.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private Task LoadAsync()
+    {
+        // A slow query must not overwrite a newer one (a live reload still running when the filters change).
+        var load = ++_loads;
+        var query = _query;
+        return TryLoadAsync(
+            async () =>
+            {
+                var result = await Api.GetLogsAsync(query);
+                if (load == _loads)
+                {
+                    _result = result;
+                }
+            },
+            isCurrent: () => load == _loads);
+    }
+
+    private async Task LoadServersAsync()
+    {
+        _servers = [.. await Api.GetServersAsync()];
+        _serverNames = _servers.ToDictionary(s => s.Id, s => s.Name);
+    }
+
+    private void Apply()
+    {
+        var from = ParseUtc(_fromFilter);
+        var to = ParseUtc(_toFilter);
+        if (from > to)
+        {
+            Error = "'From' must be earlier than 'To'.";
+            return;
+        }
+
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["serverId"] = int.TryParse(_serverFilter, CultureInfo.InvariantCulture, out var serverId) ? serverId : null,
+            ["minSeverity"] = string.IsNullOrEmpty(_severityFilter) ? null : _severityFilter,
+            ["search"] = string.IsNullOrWhiteSpace(_searchFilter) ? null : _searchFilter.Trim(),
+            ["from"] = from?.ToString(DateInputFormat, CultureInfo.InvariantCulture),
+            ["to"] = to?.ToString(DateInputFormat, CultureInfo.InvariantCulture),
+            ["page"] = null,
+        }));
+    }
+
+    private void Reset() => Navigation.NavigateTo("logs");
+
+    private void GoToPage(long page) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("page", page <= 1 ? null : (int?)page));
+
+    private void ToggleFollow(ChangeEventArgs change) => _follow = change.Value is true;
+
+    private async Task ShowNewestAsync()
+    {
+        if (CanFollow)
+        {
+            _newEntries = false;
+            await LoadAsync();
+            return;
+        }
+
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["page"] = null, ["to"] = null }));
+    }
+
+    protected override async Task OnLogsReceivedAsync(LogsReceivedEvent received)
+    {
+        // Skip batches that cannot match the filters; the search filter is left to the API.
+        if ((_query.ServerId is { } serverId && serverId != received.ServerId)
+            || (_query.MinSeverity is { } minimum && received.MaxSeverity < minimum))
+        {
+            return;
+        }
+
+        if (!_serverNames.ContainsKey(received.ServerId))
+        {
+            await TryLoadAsync(LoadServersAsync, clearsError: false);
+        }
+
+        if (_follow && CanFollow)
+        {
+            _throttle?.Request();
+        }
+        else
+        {
+            _newEntries = true;
+        }
+    }
+
+    protected override Task OnReconnectedAsync() => _follow && CanFollow ? LoadAsync() : Task.CompletedTask;
+
+    private static LogSeverity? ParseSeverity(string? value) =>
+        Enum.TryParse<LogSeverity>(value, ignoreCase: true, out var severity) && Enum.IsDefined(severity) ? severity : null;
+
+    /// <summary>
+    /// The inputs pick whole minutes, and "to 10:30" means up to the end of that minute: without this, entries logged
+    /// at 10:30:15 would be left out by the API's inclusive upper bound.
+    /// </summary>
+    private static DateTimeOffset? EndOfMinute(DateTimeOffset? value) =>
+        value is { Second: 0, Millisecond: 0 } minute ? minute.AddMinutes(1).AddTicks(-1) : value;
+
+    /// <summary>Dates in the URL and the inputs are UTC without an offset.</summary>
+    private static DateTimeOffset? ParseUtc(string? value) =>
+        DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? new DateTimeOffset(parsed, TimeSpan.Zero)
+            : null;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _throttle?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}

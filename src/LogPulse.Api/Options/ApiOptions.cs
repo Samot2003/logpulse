@@ -37,6 +37,20 @@ public sealed class RateLimitingOptions
     /// <summary>Requests per minute and client IP to the /api/auth endpoints.</summary>
     [Range(1, 10_000)]
     public int AuthPermitsPerMinute { get; set; } = 10;
+
+    /// <summary>
+    /// Ingestion requests per minute and agent. An agent normally sends about 24 (logs and metrics every 5 s);
+    /// the headroom lets it catch up after an outage. Over the limit it gets 429 and retries later.
+    /// </summary>
+    [Range(1, 100_000)]
+    public int IngestPermitsPerMinute { get; set; } = 600;
+
+    /// <summary>
+    /// Query requests per minute and dashboard user (servers, logs and metrics endpoints). Keeps one user from
+    /// saturating SQL Server with expensive log searches.
+    /// </summary>
+    [Range(1, 100_000)]
+    public int ReadPermitsPerMinute { get; set; } = 600;
 }
 
 public sealed class RetentionOptions

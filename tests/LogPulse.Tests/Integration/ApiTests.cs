@@ -153,8 +153,8 @@ public class ApiTests(SqlServerFixture fixture)
         };
 
         var ingest = await agent.PostAsJsonAsync("/api/ingest/logs", batch, Json);
-        // Nobody tracks dashboard connections yet, so agents are always told to keep the full rate.
-        Assert.Equal(new IngestResult(3, ViewersOnline: true), await ingest.Content.ReadFromJsonAsync<IngestResult>(Json));
+        // No dashboard is connected to the live hub, so the agent is told it may sample less often.
+        Assert.Equal(new IngestResult(3, ViewersOnline: false), await ingest.Content.ReadFromJsonAsync<IngestResult>(Json));
 
         using var viewer = await ViewerAsync();
         var serverId = await ServerIdAsync(viewer, server);

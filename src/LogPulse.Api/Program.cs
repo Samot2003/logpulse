@@ -1,16 +1,19 @@
+using System.Net;
 using System.Text.Json.Serialization;
-using System.Threading.RateLimiting;
 using LogPulse.Api.Auth;
 using LogPulse.Api.Background;
 using LogPulse.Api.Controllers;
 using LogPulse.Api.Infrastructure;
 using LogPulse.Api.Ingest;
+using LogPulse.Api.Live;
 using LogPulse.Api.Options;
+using LogPulse.Core.Contracts;
 using LogPulse.Core.Models;
 using LogPulse.Data;
 using LogPulse.Data.Daos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -40,7 +43,9 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<IngestService>();
-builder.Services.AddSingleton<IViewerPresence, AlwaysWatchedPresence>();
+builder.Services.AddSingleton<ViewerTracker>();
+builder.Services.AddSingleton<IViewerPresence>(sp => sp.GetRequiredService<ViewerTracker>());
+builder.Services.AddSingleton<ILiveUpdates, HubLiveUpdates>();
 builder.Services.AddSingleton<RetentionService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionService>());
 
@@ -60,17 +65,19 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Read, p => p.RequireRole(Roles.Viewer, Roles.Admin))
     .AddPolicy(Policies.Admin, p => p.RequireRole(Roles.Admin));
 
-// Brute-force protection for the anonymous auth endpoints, per client IP.
-builder.Services.AddRateLimiter(limiter =>
+// Rate limits: auth per client IP (brute force), ingestion per agent and queries per user.
+builder.Services.AddLogPulseRateLimits();
+
+// The dashboard calls /api/auth on behalf of its users and forwards their IP in X-Forwarded-For, so the auth rate
+// limit counts each user instead of the dashboard as a whole. The header is only trusted from known proxies:
+// loopback by default (the dashboard on the same machine), others listed in ForwardedHeaders:KnownProxies.
+builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
 {
-    limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    limiter.AddPolicy(Policies.AuthRateLimit, context =>
+    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
     {
-        var permits = context.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>().Value.AuthPermitsPerMinute;
-        return RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = permits, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
-    });
+        forwarded.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
 });
 
 // MVC with JSON (enums as strings) and MessagePack input for ingestion only. Both enforce the batch limits while
@@ -82,6 +89,9 @@ builder.Services
         json.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         IngestSerialization.AddBatchLimits(json.JsonSerializerOptions);
     });
+
+// Live updates for the dashboard. Its server connects with each user's JWT in the Authorization header.
+builder.Services.AddSignalR();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<BadRequestExceptionHandler>();
@@ -106,6 +116,7 @@ builder.Services.AddSwaggerGen(swagger =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -121,6 +132,10 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// A connection outlives its access token, so it is closed when the token expires and the client reconnects with
+// a fresh one: a revoked or expired user stops receiving data within one token lifetime.
+app.MapHub<LiveHub>(LiveHubRoute.Path, hub => hub.CloseOnAuthenticationExpiration = true);
 app.MapHealthChecks("/health").AllowAnonymous();
 
 app.EnsureValidConfiguration();

@@ -5,7 +5,8 @@ using LogPulse.Core.Contracts;
 
 namespace LogPulse.Tests.Fakes;
 
-public sealed record RecordedRequest(string Path, string? BearerToken, string? ContentType, ReadOnlyMemory<byte> Body);
+public sealed record RecordedRequest(
+    string Path, string? BearerToken, string? ContentType, ReadOnlyMemory<byte> Body, string Query = "", string? ForwardedFor = null);
 
 /// <summary>Answers HTTP requests with a function and records what it received.</summary>
 public sealed class StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
@@ -37,7 +38,9 @@ public sealed class StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessage
                 request.RequestUri!.AbsolutePath,
                 request.Headers.Authorization?.Parameter,
                 request.Content?.Headers.ContentType?.MediaType,
-                body));
+                body,
+                request.RequestUri.Query,
+                request.Headers.TryGetValues("X-Forwarded-For", out var forwarded) ? string.Join(",", forwarded) : null));
         }
 
         if (BeforeResponse is { } wait)

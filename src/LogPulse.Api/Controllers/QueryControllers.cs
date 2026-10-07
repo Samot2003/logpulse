@@ -4,12 +4,14 @@ using LogPulse.Core.Queries;
 using LogPulse.Data.Daos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LogPulse.Api.Controllers;
 
 [ApiController]
 [Route("api/servers")]
 [Authorize(Policy = Policies.Read)]
+[EnableRateLimiting(Policies.ReadRateLimit)]
 [Produces("application/json")]
 public sealed class ServersController(IServerDao servers) : ControllerBase
 {
@@ -23,6 +25,7 @@ public sealed class ServersController(IServerDao servers) : ControllerBase
 [ApiController]
 [Route("api/logs")]
 [Authorize(Policy = Policies.Read)]
+[EnableRateLimiting(Policies.ReadRateLimit)]
 [Produces("application/json")]
 public sealed class LogsController(ILogDao logs) : ControllerBase
 {
@@ -37,6 +40,7 @@ public sealed class LogsController(ILogDao logs) : ControllerBase
 [ApiController]
 [Route("api/metrics")]
 [Authorize(Policy = Policies.Read)]
+[EnableRateLimiting(Policies.ReadRateLimit)]
 [Produces("application/json")]
 public sealed class MetricsController(IMetricDao metrics, IServerDao servers, TimeProvider time) : ControllerBase
 {

@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="bunit" Version="2.11.3" />
     <PackageReference Include="coverlet.collector" Version="10.1.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -30,6 +31,7 @@
     <ProjectReference Include="..\..\src\LogPulse.Data\LogPulse.Data.csproj" />
     <ProjectReference Include="..\..\src\LogPulse.Api\LogPulse.Api.csproj" />
     <ProjectReference Include="..\..\src\LogPulse.Agent\LogPulse.Agent.csproj" />
+    <ProjectReference Include="..\..\src\LogPulse.Dashboard\LogPulse.Dashboard.csproj" />
   </ItemGroup>
 
 </Project>

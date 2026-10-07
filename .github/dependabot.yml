@@ -6,6 +6,11 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      # Swashbuckle 10 moves to Microsoft.OpenApi 2.x, which renames the types
+      # used by the Swagger setup in the API; 9.x is kept until that migration.
+      - dependency-name: Swashbuckle.AspNetCore
+        update-types: ["version-update:semver-major"]
     groups:
       # One PR per week for minor/patch bumps instead of one per package.
       nuget-minor-and-patch:

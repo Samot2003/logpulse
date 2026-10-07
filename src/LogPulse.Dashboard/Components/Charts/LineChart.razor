@@ -1,0 +1,76 @@
+<figure class="chart">
+    <figcaption class="chart-header">
+        <span class="chart-title">@Title</span>
+        @if (_latest is { } latest)
+        {
+            <span class="chart-latest">@Display.Percent(latest)</span>
+            <span class="chart-range">peak @Display.Percent(_peak)</span>
+        }
+    </figcaption>
+    <svg class="chart-plot chart-@Tone" viewBox="0 0 @Width @Height" preserveAspectRatio="none" role="img" aria-label="@AriaLabel">
+        @foreach (var level in GridLevels)
+        {
+            var y = Height - (level / 100d * Height);
+            <line class="chart-grid" x1="0" x2="@Width" y1="@Format(y)" y2="@Format(y)" />
+        }
+        @foreach (var line in _lines)
+        {
+            <polyline class="chart-line" points="@line" />
+        }
+    </svg>
+    <div class="chart-axis">
+        <span>@AxisLabel(From)</span>
+        @if (_lines.Count == 0)
+        {
+            <span class="chart-empty">No samples in this period</span>
+        }
+        <span>@AxisLabel(To) UTC</span>
+    </div>
+</figure>
+
+@code {
+    private const double Width = 600;
+    private const double Height = 140;
+    private static readonly int[] GridLevels = [0, 50, 100];
+
+    private IReadOnlyList<string> _lines = [];
+    private double? _latest;
+    private double _peak;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ChartPoint> Points { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset From { get; set; }
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset To { get; set; }
+
+    /// <summary>A pause longer than this breaks the line (the agent was offline).</summary>
+    [Parameter]
+    public TimeSpan Gap { get; set; } = TimeSpan.FromSeconds(90);
+
+    /// <summary>Colour of the line: "cpu", "memory" or "disk".</summary>
+    [Parameter]
+    public string Tone { get; set; } = "cpu";
+
+    private string AriaLabel => _latest is { } latest
+        ? $"{Title}: {Display.Percent(latest)} now, peak {Display.Percent(_peak)}"
+        : $"{Title}: no samples";
+
+    protected override void OnParametersSet()
+    {
+        _lines = ChartGeometry.Lines(Points, From, To, max: 100, Width, Height, Gap);
+        var visible = Points.Where(p => p.Time >= From && p.Time <= To).ToList();
+        _latest = visible.Count > 0 ? visible.MaxBy(p => p.Time).Value : null;
+        _peak = visible.Count > 0 ? visible.Max(p => p.Value) : 0;
+    }
+
+    // Times alone are ambiguous once the window spans a day ("23:00 … 23:00"), so long windows show the date too.
+    private string AxisLabel(DateTimeOffset value) => To - From >= TimeSpan.FromDays(1) ? Display.Time(value)[5..16] : Display.Time(value)[11..16];
+
+    private static string Format(double value) => value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}
