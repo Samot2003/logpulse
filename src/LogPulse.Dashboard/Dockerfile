@@ -12,7 +12,7 @@ COPY src/LogPulse.Core/ src/LogPulse.Core/
 COPY src/LogPulse.Dashboard/ src/LogPulse.Dashboard/
 RUN dotnet publish src/LogPulse.Dashboard/LogPulse.Dashboard.csproj -c Release --no-restore -o /app
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app .
 # Data Protection keys live here; compose mounts a volume so they survive a new container.
