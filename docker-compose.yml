@@ -1,0 +1,150 @@
+# The whole LogPulse stack on one machine: SQL Server, the API, the dashboard and a demo agent that monitors its own
+# container and follows a generated log file. Start it with:
+#   cp .env.example .env    (then change the values)
+#   docker compose up --build
+# Dashboard: http://localhost:5090 (viewer / VIEWER_PASSWORD). API: http://localhost:5080/health.
+# Ports are published on 127.0.0.1 only: this is a local demo, not a deployment.
+
+name: logpulse
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: [/tmp]
+
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?Copy .env.example to .env and set SQL_SA_PASSWORD}
+    volumes:
+      - sql-data:/var/opt/mssql
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/LogPulse.Api/Dockerfile
+    <<: *hardening
+    depends_on:
+      sql:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__LogPulse: "Server=sql,1433;Database=LogPulse;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Copy .env.example to .env and set JWT_SIGNING_KEY}
+      Seed__Users__0__UserName: admin
+      Seed__Users__0__Password: ${ADMIN_PASSWORD:?Copy .env.example to .env and set ADMIN_PASSWORD}
+      Seed__Users__0__Role: Admin
+      Seed__Users__1__UserName: viewer
+      Seed__Users__1__Password: ${VIEWER_PASSWORD:?Copy .env.example to .env and set VIEWER_PASSWORD}
+      Seed__Users__1__Role: Viewer
+      Seed__Agents__0__ServerName: docker-demo
+      Seed__Agents__0__ApiKey: ${AGENT_API_KEY:?Copy .env.example to .env and set AGENT_API_KEY}
+      # The dashboard forwards each user's IP; only its fixed address is trusted to do so.
+      ForwardedHeaders__KnownProxies__0: 172.30.88.10
+    ports:
+      - "127.0.0.1:5080:8080"
+    networks: [backend]
+    healthcheck:
+      # The runtime image has no curl: bash's /dev/tcp is enough for an HTTP GET.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: src/LogPulse.Dashboard/Dockerfile
+    <<: *hardening
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Dashboard__ApiBaseUrl: http://api:8080/
+      # Plain HTTP stays inside the compose network; browsers reach the dashboard on localhost only.
+      Dashboard__AllowInsecureHttp: "true"
+    volumes:
+      - dashboard-keys:/var/lib/logpulse-dashboard/keys
+    ports:
+      - "127.0.0.1:5090:8080"
+    networks:
+      backend:
+        ipv4_address: 172.30.88.10
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q ' 200 ' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  agent:
+    build:
+      context: .
+      dockerfile: src/LogPulse.Agent/Dockerfile
+    <<: *hardening
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      Agent__ApiBaseUrl: http://api:8080/
+      Agent__AllowInsecureHttp: "true"
+      Agent__ServerName: docker-demo
+      Agent__ApiKey: ${AGENT_API_KEY}
+      Agent__DiskPath: /
+      Agent__LogFiles__0__Path: /var/log/demo/app.log
+      Agent__LogFiles__0__Source: demo-app
+    volumes:
+      - agent-state:/var/lib/logpulse-agent
+      - demo-logs:/var/log/demo:ro
+    networks: [backend]
+
+  # Writes a few realistic log lines every couple of seconds for the agent to follow.
+  demo-logs:
+    image: busybox:1.36
+    <<: *hardening
+    volumes:
+      - demo-logs:/var/log/demo
+    network_mode: none
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        n=0
+        while true; do
+          n=$$((n + 1))
+          now=$$(date -u '+%Y-%m-%d %H:%M:%S')
+          case $$((n % 12)) in
+            0) line="ERROR payment provider timeout after 30s (order $$n)" ;;
+            5) line="WARN queue length above 1000" ;;
+            9) line="WARN slow request GET /orders took 2.4s" ;;
+            *) line="INFO request $$n handled in $$((n % 90 + 10)) ms" ;;
+          esac
+          echo "$$now $$line" >> /var/log/demo/app.log
+          sleep 2
+        done
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.30.88.0/24
+
+volumes:
+  sql-data:
+  dashboard-keys:
+  agent-state:
+  demo-logs:

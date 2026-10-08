@@ -63,6 +63,12 @@ public sealed class AgentOptions : IValidatableObject
     /// <summary>Read the existing content of a log file seen for the first time, instead of only new lines.</summary>
     public bool ReadExistingLogs { get; set; }
 
+    /// <summary>
+    /// Allows plain HTTP to a remote API outside Development. Only for a private network that nobody else can sniff,
+    /// such as the docker compose network of the demo: the API key and the tokens travel unencrypted.
+    /// </summary>
+    public bool AllowInsecureHttp { get; set; }
+
     public List<LogFileOptions> LogFiles { get; set; } = [];
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

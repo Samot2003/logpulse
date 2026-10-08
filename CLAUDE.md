@@ -24,7 +24,7 @@ Responder siempre en español. README, código, comentarios y commits en inglés
 - Agente en local (con la API levantada): `dotnet run --project src/LogPulse.Agent`. Envía como `demo-server` y sigue `src/LogPulse.Agent/dev-logs/demo.log` (ignorado por git).
 - Dashboard en local (con la API levantada): `dotnet run --project src/LogPulse.Dashboard` (http://localhost:5090, usuario `viewer` / `dev-viewer-password`).
 - Publicar el agente para Windows: `dotnet publish src/LogPulse.Agent -p:PublishProfile=win-x64` (un `.exe` self-contained en `artifacts/agent-win-x64`). No debe cambiar ningún `packages.lock.json`.
-- Entorno completo (desde H7): `docker compose up --build`
+- Entorno completo en Docker: `cp .env.example .env` (una vez) y `docker compose up --build`; parar con `docker compose down` (`-v` borra también los datos). No uses los puertos 5080/5090 a la vez con la API o el dashboard en local.
 
 ## Convenciones
 - Acceso a datos solo a través de interfaces en `Data`; la API depende de las interfaces, no de Dapper.

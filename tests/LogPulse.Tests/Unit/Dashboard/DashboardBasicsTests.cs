@@ -159,6 +159,15 @@ public class DashboardOptionsTests
     }
 
     [Fact]
+    public void Plain_http_on_a_private_network_needs_an_explicit_opt_in()
+    {
+        var compose = new DashboardOptions { ApiBaseUrl = new Uri("http://api:8080/"), AllowInsecureHttp = true };
+
+        DashboardStartupChecks.Check(compose, Environment(Environments.Production));
+        Assert.False(new DashboardOptions().AllowInsecureHttp);
+    }
+
+    [Fact]
     public void The_api_address_keeps_its_base_path()
     {
         Assert.Equal("https://host/logpulse/", ApiAddress.Normalize(new Uri("https://host/logpulse")).AbsoluteUri);

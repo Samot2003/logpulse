@@ -140,13 +140,25 @@ Se aplica a todos los hitos, además de sus criterios propios:
 
 **Aceptación:** ui-tester ve llegar datos en vivo sin errores en la consola. ✅ Primera pasada: datos en vivo correctos y consola limpia, con el bloqueante de las fechas; segunda pasada: todo OK. Comprobado también en local con la API, el agente y el dashboard: el agente registra "Dashboard viewers online: True" con el dashboard abierto y vuelve a False al cerrar sesión.
 
-## [ ] H7 — Docker
+## [x] H7 — Docker
 **Agentes:** devops-verifier, api-tester, ui-tester
-- [ ] Dockerfiles multi-stage (API, Dashboard, Agent Linux), con usuario no root y `.dockerignore`.
-- [ ] `docker-compose.yml` con SQL Server (healthcheck), API, Dashboard y Agent de demo, más `.env.example`.
-- [ ] Job de CI que construye las imágenes y hace smoke test de `compose up` + `/health`.
+- [x] Dockerfiles multi-stage (API, Dashboard, Agent Linux), con usuario no root y `.dockerignore`.
+- [x] `docker-compose.yml` con SQL Server (healthcheck), API, Dashboard y Agent de demo, más `.env.example`.
+- [x] Job de CI que construye las imágenes y hace smoke test de `compose up` + `/health`.
 
-**Aceptación:** `docker compose up --build` muestra datos en vivo en el dashboard en menos de 2 minutos.
+**Avisos de H4–H6 que se resuelven aquí:**
+- [x] Reintentos de arranque de la API solo ante errores de "servidor aún no listo" (`SqlStartupErrors`); un script roto falla al momento.
+- [x] Agente y dashboard hablan con `http://api:8080` dentro de compose con un opt-in explícito (`AllowInsecureHttp`, desactivado por defecto).
+- [x] IP fija del dashboard en `ForwardedHeaders:KnownProxies` de la API; claves de Data Protection del dashboard en un volumen.
+- [x] Instalación del agente en Linux (systemd) documentada en el README.
+
+**`/verificar 7`:** devops-verifier AVISOS, api-tester AVISOS, ui-tester OK, en una sola pasada. Historial: [docs/verification/H7.md](verification/H7.md).
+
+**Avisos que pasan a otros hitos:**
+- H8: fijar las acciones de terceros por SHA en el workflow de CD; valorar `healthcheck` del agente y hardening del contenedor de SQL Server si se despliega con compose.
+- H9: la tarjeta del resumen solo navega desde el nombre del servidor.
+
+**Aceptación:** `docker compose up --build` muestra datos en vivo en el dashboard en menos de 2 minutos. ✅ Stack sano en 21–30 s; el ui-tester vio `docker-demo` con métricas y logs llegando en vivo y la consola limpia.
 
 ## [ ] H8 — CD
 **Agentes:** devops-verifier, security-auditor

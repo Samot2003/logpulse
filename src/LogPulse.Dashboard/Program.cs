@@ -4,6 +4,7 @@ using LogPulse.Dashboard.Components;
 using LogPulse.Dashboard.Live;
 using LogPulse.Dashboard.Options;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,6 +39,14 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         cookie.SlidingExpiration = true;
     });
 builder.Services.AddAuthorization();
+
+// Data Protection encrypts the session cookie and the antiforgery tokens. In a container its keys must live on a
+// volume, or every new container would make the cookies of the previous one unreadable.
+var dataProtection = builder.Services.AddDataProtection().SetApplicationName("LogPulse.Dashboard");
+if (builder.Configuration[$"{DashboardOptions.SectionName}:{nameof(DashboardOptions.KeysDirectory)}"] is { Length: > 0 } keysDirectory)
+{
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+}
 
 // The API: auth endpoints (no retries, single-use refresh tokens), queries with the user's token, and the live hub.
 builder.Services.AddHttpClient(AuthApiClient.HttpClientName, ConfigureApiClient)

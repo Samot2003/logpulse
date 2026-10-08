@@ -36,10 +36,10 @@ public static class AgentStartupChecks
                 $"Agent:ApiKey is the public development key, but the environment is '{environment.EnvironmentName}'. Configure the key created with POST /api/agents.");
         }
 
-        if (options.ApiBaseUrl is { } url && url.Scheme == Uri.UriSchemeHttp && !url.IsLoopback)
+        if (options.ApiBaseUrl is { } url && url.Scheme == Uri.UriSchemeHttp && !url.IsLoopback && !options.AllowInsecureHttp)
         {
             throw new InvalidOperationException(
-                $"Agent:ApiBaseUrl uses plain HTTP to a remote host ({url.Host}): the API key would travel unencrypted. Use https.");
+                $"Agent:ApiBaseUrl uses plain HTTP to a remote host ({url.Host}): the API key would travel unencrypted. Use https (or set Agent:AllowInsecureHttp on a private network).");
         }
     }
 }

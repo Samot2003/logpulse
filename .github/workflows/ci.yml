@@ -161,3 +161,52 @@ jobs:
             echo "::error::$vulnerable vulnerable NuGet package(s), $problems problem(s). See the report above."
             exit 1
           fi
+
+  docker:
+    name: Docker images and compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # The demo placeholders are enough for a throwaway stack that only lives inside this job.
+      - name: Create .env from the example
+        run: cp .env.example .env
+
+      - name: Build the images
+        run: docker compose build
+
+      # --wait returns once SQL Server, the API and the dashboard report healthy (it fails if one never does).
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 180
+
+      - name: Health endpoints answer
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:5080/health
+          curl --fail --silent --show-error http://127.0.0.1:5090/health
+
+      # Same check as the acceptance criterion: the demo agent's logs and metrics reach the API within two minutes.
+      - name: The demo agent's data arrives
+        run: |
+          set -euo pipefail
+          set -a; . ./.env; set +a
+          token=$(curl --fail -s -H 'Content-Type: application/json' \
+            -d "{\"userName\":\"viewer\",\"password\":\"$VIEWER_PASSWORD\"}" \
+            http://127.0.0.1:5080/api/auth/token | jq -er .accessToken)
+          for i in $(seq 1 24); do
+            logs=$(curl --fail -s -H "Authorization: Bearer $token" 'http://127.0.0.1:5080/api/logs?pageSize=1' | jq .totalCount)
+            metrics=$(curl --fail -s -H "Authorization: Bearer $token" http://127.0.0.1:5080/api/metrics/latest | jq length)
+            echo "attempt $i: $logs log entries, metrics for $metrics server(s)"
+            if [ "$logs" -gt 0 ] && [ "$metrics" -gt 0 ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::No data from the demo agent after two minutes."
+          exit 1
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
