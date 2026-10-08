@@ -14,7 +14,7 @@ COPY src/LogPulse.Data/ src/LogPulse.Data/
 COPY src/LogPulse.Api/ src/LogPulse.Api/
 RUN dotnet publish src/LogPulse.Api/LogPulse.Api.csproj -c Release --no-restore -o /app
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_HTTP_PORTS=8080
