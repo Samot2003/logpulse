@@ -13,7 +13,7 @@ COPY src/LogPulse.Agent/ src/LogPulse.Agent/
 RUN dotnet publish src/LogPulse.Agent/LogPulse.Agent.csproj -c Release --no-restore -o /app
 
 # A worker service: the plain .NET runtime is enough, no ASP.NET Core.
-FROM mcr.microsoft.com/dotnet/runtime:8.0
+FROM mcr.microsoft.com/dotnet/runtime:10.0
 WORKDIR /app
 COPY --from=build /app .
 # Saved log positions; compose mounts a volume here so a new container resumes where the old one stopped.
