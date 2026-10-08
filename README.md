@@ -18,6 +18,35 @@ dotnet test LogPulse.sln --filter "Category!=Integration"   # unit tests
 dotnet test LogPulse.sln --filter "Category=Integration"    # integration tests (Docker)
 ```
 
+## Quick start with Docker
+
+Requires Docker. From the repository root:
+
+```bash
+cp .env.example .env          # then change every value in .env
+docker compose up --build
+```
+
+In about a minute the whole stack is up: open <http://localhost:5090> and log in as `viewer` with the `VIEWER_PASSWORD` from `.env`. The `docker-demo` server appears with its metrics, and its logs arrive live from a small generator that writes a line every two seconds.
+
+| Service | What it is | Address |
+|---|---|---|
+| `sql` | SQL Server 2022, data in the `sql-data` volume | internal only |
+| `api` | The API | <http://localhost:5080/health> |
+| `dashboard` | The dashboard | <http://localhost:5090> |
+| `agent` | A Linux agent monitoring its own container and following `/var/log/demo/app.log` | — |
+| `demo-logs` | Writes realistic log lines for the agent | — |
+
+How it is put together:
+- **Images:** multi-stage Dockerfiles (`src/*/Dockerfile`): restore from the lock files, publish in Release, then copy into the slim runtime image. They run as the images' non-root user.
+- **Containers:** read-only file systems, no Linux capabilities, `no-new-privileges`.
+- **Startup order:** health checks (SQL Server with `sqlcmd`, the API and the dashboard on `/health`) start each service only once the one it needs is ready.
+- **Secrets:** they come from `.env`, which git ignores.
+- **Exposure:** ports are published on `127.0.0.1` only, so the stack is not reachable from other machines. Inside the compose network the dashboard and the agent talk to the API over plain HTTP, which they only accept because `AllowInsecureHttp` is set explicitly. The dashboard has a fixed address, the only one the API trusts to forward users' IPs.
+- **Volumes:** the dashboard's Data Protection keys (which encrypt its cookies) live in the `dashboard-keys` volume; they are stored unencrypted, readable only through that volume. The agent's saved log positions live in `agent-state`.
+
+`docker compose down` stops everything; `docker compose down -v` also deletes the data. CI builds the images and runs this same stack on every push, checking that the demo agent's data reaches the API.
+
 ## Run the API locally
 
 Start SQL Server in Docker, then the API (the database and schema are created on first start):
@@ -152,6 +181,54 @@ Start-Service LogPulseAgent
 If a step fails, remove what was created before running the block again: `sc.exe delete LogPulseAgent`, then the `C:\Program Files\LogPulse Agent` and `C:\ProgramData\LogPulse Agent` folders.
 
 The folders of the followed logs must be writable only by administrators and the application that writes them. Otherwise a local user could replace a log with a link to another file the service can read, and its content would be sent to the API.
+
+### Install on Linux (systemd)
+
+Publish for Linux (`dotnet publish src/LogPulse.Agent -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o artifacts/agent-linux-x64`) and copy `LogPulse.Agent` and `appsettings.json` to `/opt/logpulse-agent/`. Then, as root:
+
+```bash
+useradd --system --no-create-home --shell /usr/sbin/nologin logpulse-agent
+install -d -m 750 -o root -g logpulse-agent /etc/logpulse-agent
+# The API key is a secret: root writes it, only the agent's group can read it.
+install -m 640 -o root -g logpulse-agent /dev/null /etc/logpulse-agent/agent.env
+cat > /etc/logpulse-agent/agent.env <<'EOF'
+Agent__ApiBaseUrl=https://logpulse.example.com/
+Agent__ServerName=web-01
+Agent__ApiKey=the key returned by POST /api/agents
+Agent__LogFiles__0__Path=/var/log/myapp/app.log
+Agent__LogFiles__0__Source=myapp
+EOF
+
+cat > /etc/systemd/system/logpulse-agent.service <<'EOF'
+[Unit]
+Description=LogPulse agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=logpulse-agent
+EnvironmentFile=/etc/logpulse-agent/agent.env
+Environment=DOTNET_ENVIRONMENT=Production
+Environment=Agent__StateDirectory=/var/lib/logpulse-agent
+StateDirectory=logpulse-agent
+WorkingDirectory=/opt/logpulse-agent
+ExecStart=/opt/logpulse-agent/LogPulse.Agent
+Restart=on-failure
+# Read-only view of the system; it can only write its own state folder.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now logpulse-agent
+```
+
+The `logpulse-agent` user needs read access to the followed log files (for example through their group). As on Windows, their folders must be writable only by root and the application that writes them.
 
 Known limits: every physical line is one log entry (a multi-line stack trace becomes several), and the timestamp is the time the line was read (lines read late, for example after an outage, get that later time).
 

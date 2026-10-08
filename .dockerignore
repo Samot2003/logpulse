@@ -1,0 +1,24 @@
+# Only the sources the images build from. Build output, local state and secrets never enter the build context.
+**/bin/
+**/obj/
+**/TestResults/
+artifacts/
+publish/
+tests/
+docs/
+samples/
+.git/
+.github/
+.claude/
+.vs/
+.vscode/
+.idea/
+**/*.user
+**/dev-logs/
+**/state/
+.env
+.env.*
+**/appsettings.*.local.json
+
+# The images use the SDK band of mcr.microsoft.com/dotnet/sdk:8.0; global.json pins the local band (8.0.4xx).
+global.json

@@ -21,6 +21,18 @@ public sealed class DashboardOptions : IValidatableObject
     [Range(typeof(TimeSpan), "00:00:00.5", "00:01:00")]
     public TimeSpan LiveRefreshInterval { get; set; } = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// Allows plain HTTP to a remote API outside Development. Only for a private network that nobody else can sniff,
+    /// such as the docker compose network of the demo: passwords and tokens travel unencrypted.
+    /// </summary>
+    public bool AllowInsecureHttp { get; set; }
+
+    /// <summary>
+    /// Where the Data Protection keys (cookie and antiforgery encryption) are kept. Empty: the framework default,
+    /// which inside a container is lost with the container. Set it to a mounted volume there.
+    /// </summary>
+    public string? KeysDirectory { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (ApiBaseUrl is { } url && (!url.IsAbsoluteUri || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps)))

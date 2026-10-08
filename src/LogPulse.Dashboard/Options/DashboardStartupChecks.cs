@@ -21,10 +21,11 @@ public static class DashboardStartupChecks
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(environment);
 
-        if (!environment.IsDevelopment() && options.ApiBaseUrl is { } url && url.Scheme == Uri.UriSchemeHttp && !url.IsLoopback)
+        if (!environment.IsDevelopment() && !options.AllowInsecureHttp
+            && options.ApiBaseUrl is { } url && url.Scheme == Uri.UriSchemeHttp && !url.IsLoopback)
         {
             throw new InvalidOperationException(
-                $"Dashboard:ApiBaseUrl uses plain HTTP to a remote host ({url.Host}): passwords and tokens would travel unencrypted. Use https.");
+                $"Dashboard:ApiBaseUrl uses plain HTTP to a remote host ({url.Host}): passwords and tokens would travel unencrypted. Use https (or set Dashboard:AllowInsecureHttp on a private network).");
         }
     }
 }

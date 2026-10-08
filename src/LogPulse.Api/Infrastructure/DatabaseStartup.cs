@@ -15,7 +15,8 @@ public static partial class DatabaseStartup
     public const string ConnectionStringName = "LogPulse";
 
     // A SQL Server container needs up to a minute to accept connections, and user databases recover a bit later
-    // than master after a restart. Keep retrying for a while instead of crashing on the first attempt.
+    // than master after a restart. Keep retrying for a while instead of crashing on the first attempt, but only for
+    // errors that mean "not ready yet": a broken schema script fails at once.
     private static readonly TimeSpan StartupDeadline = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
 
@@ -57,7 +58,7 @@ public static partial class DatabaseStartup
                 await operation();
                 return;
             }
-            catch (DbException ex) when (time.GetElapsedTime(started) < StartupDeadline)
+            catch (DbException ex) when (SqlStartupErrors.IsServerNotReady(ex) && time.GetElapsedTime(started) < StartupDeadline)
             {
                 LogDatabaseNotReady(app.Logger, attempt, ex.Message);
                 await Task.Delay(RetryDelay, time, cancellationToken);

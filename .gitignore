@@ -22,6 +22,7 @@ coverage/
 appsettings.*.local.json
 *.env
 .env*
+!.env.example
 
 # Claude Code local-only settings
 .claude/settings.local.json

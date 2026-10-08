@@ -91,4 +91,15 @@ public class AgentOptionsTests
         Assert.Throws<InvalidOperationException>(() => AgentStartupChecks.Check(remote, Environment(Environments.Production)));
         AgentStartupChecks.Check(local, Environment(Environments.Production));
     }
+
+    [Fact]
+    public void Plain_http_on_a_private_network_needs_an_explicit_opt_in()
+    {
+        var compose = Valid();
+        compose.ApiBaseUrl = new Uri("http://api:8080/");
+        compose.AllowInsecureHttp = true;
+
+        AgentStartupChecks.Check(compose, Environment(Environments.Production));
+        Assert.False(new AgentOptions().AllowInsecureHttp);
+    }
 }
