@@ -162,10 +162,18 @@ Se aplica a todos los hitos, además de sus criterios propios:
 
 ## [ ] H8 — CD
 **Agentes:** devops-verifier, security-auditor
-- [ ] `.github/workflows/cd.yml`: con push a `main` publica imágenes en GHCR (`sha` + `latest`).
-- [ ] Con tag `v*`: tags semver y GitHub Release con el Agent `win-x64` en zip.
-- [ ] Despliegue a un entorno gratuito (se decide al llegar), con environment `production`, secretos en GitHub Secrets y smoke test a `/health`.
-- [ ] Antes del primer despliegue, decidir con el usuario si se cierra ya la excepción de edición de scripts SQL publicados. A partir de ese momento sí habrá una base de datos real, y las guardas por nombre no aplican cambios a objetos que ya existen (aviso del code-reviewer en `/verificar 1`).
+- [x] `.github/workflows/cd.yml`: con push a `main` publica imágenes en GHCR (`sha-<commit>` + `latest`) de la API, el dashboard y el agente. Acciones de terceros fijadas por SHA (aviso de H7).
+- [x] Con tag `v*`: tags semver de las imágenes y GitHub Release con el Agent `win-x64` en zip + SHA-256 (pre-release si el tag lleva sufijo).
+- [x] Despliegue a **Azure for Students** (decidido con el usuario: límite de gasto real, sin tarjeta): Container Apps (Consumption, escala a cero, máx. 1 réplica) + Azure SQL Database con la oferta gratuita (`AutoPause` al agotar la cuota) + VNet con service endpoint (el firewall de SQL solo admite la subred). Todo en `infra/main.bicep`, validado en el CI con `az bicep build`.
+- [x] Environment `production` con aprobación manual, login en Azure por OIDC (identidad administrada con credencial federada solo para `repo:…:environment:production`, rol propio sin `listSecrets` solo sobre las dos apps; despliegue por digest y solo de commits que ya están en `main`), secretos en GitHub Secrets y smoke test a `/health` comprobando que sirve la revisión nueva.
+- [x] Excepción de edición de scripts SQL: **se cierra al primer despliegue en Azure** (decidido con el usuario; actualizado en `CLAUDE.md`).
+- [x] La API no crea la base de datos en Azure (`Database:CreateIfMissing=false`): un nombre mal escrito no puede crear una base de datos de pago.
+- [x] `ForwardedHeaders:KnownNetworks` y `ForwardLimit` en la API y el dashboard (que ahora también lee `X-Forwarded-Proto`): detrás del ingress de Azure el rate limit de login sigue siendo por usuario y no se puede falsear.
+- [ ] Pasos manuales del usuario (`docs/deploy-azure.md`): crear el environment `production` **antes del merge**, hacer públicos los paquetes de GHCR, provisionar con Bicep, configurar secretos y variables, lanzar el primer deploy.
+
+**`/verificar 8`:** devops-verifier OK y security-auditor OK tras tres pasadas, sin bloqueantes. Historial: [docs/verification/H8.md](verification/H8.md). El hito se marca cuando se cumpla la aceptación con runs reales.
+
+**Avisos de H7 pendientes:** `healthcheck` del agente y hardening del contenedor de SQL Server en compose: no aplican al despliegue elegido (Azure no usa compose; el agente no se despliega).
 
 **Aceptación:** push a `main` publica en GHCR, tag crea la Release y el deploy pasa el smoke test. Se pide confirmación antes de cada push de imágenes y de cada despliegue.
 

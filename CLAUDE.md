@@ -24,12 +24,13 @@ Responder siempre en español. README, código, comentarios y commits en inglés
 - Agente en local (con la API levantada): `dotnet run --project src/LogPulse.Agent`. Envía como `demo-server` y sigue `src/LogPulse.Agent/dev-logs/demo.log` (ignorado por git).
 - Dashboard en local (con la API levantada): `dotnet run --project src/LogPulse.Dashboard` (http://localhost:5090, usuario `viewer` / `dev-viewer-password`).
 - Publicar el agente para Windows: `dotnet publish src/LogPulse.Agent -p:PublishProfile=win-x64` (un `.exe` self-contained en `artifacts/agent-win-x64`). No debe cambiar ningún `packages.lock.json`.
+- Validar la infraestructura de Azure: `az bicep build --file infra/main.bicep` (o `bicep lint infra/main.bicep`). El despliegue en Azure es manual y está en `docs/deploy-azure.md`; nunca se lanza sin permiso del usuario.
 - Entorno completo en Docker: `cp .env.example .env` (una vez) y `docker compose up --build`; parar con `docker compose down` (`-v` borra también los datos). No uses los puertos 5080/5090 a la vez con la API o el dashboard en local.
 
 ## Convenciones
 - Acceso a datos solo a través de interfaces en `Data`; la API depende de las interfaces, no de Dapper.
 - Nullable y warnings-as-errors activados.
-- Scripts SQL en `src/LogPulse.Data/Schema/` numerados (`00N_*.sql`) e idempotentes. **Excepción hasta `v1.0.0`:** como no hay ninguna base de datos desplegada (solo contenedores de test), se pueden editar los scripts ya publicados. Desde `v1.0.0`, cualquier cambio va en un script nuevo.
+- Scripts SQL en `src/LogPulse.Data/Schema/` numerados (`00N_*.sql`) e idempotentes. **Excepción hasta el primer despliegue en Azure (H8):** mientras no haya ninguna base de datos desplegada (solo contenedores de test), se pueden editar los scripts ya publicados. En cuanto exista la base de datos de Azure, cualquier cambio va en un script nuevo (`003_*.sql`, ...), porque las guardas por nombre no modifican objetos que ya existen.
 - Secretos fuera del repo (user-secrets / variables de entorno / GitHub Secrets).
 - Hooks de `.claude/settings.json`: formatean los `.cs` editados y ejecutan los tests unitarios antes de terminar una tarea.
 - **Git:** nunca hacer `git commit`, `git merge` ni `git push` sin permiso explícito del usuario para esa acción concreta. Tampoco `docker push` ni despliegues.

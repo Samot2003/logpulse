@@ -32,15 +32,27 @@ public static partial class DatabaseStartup
         ValidateSeed(seed); // configuration errors fail before any retry loop
 
         var connectionString = GetConnectionString(app.Configuration);
+        var createIfMissing = CreateIfMissing(app.Configuration);
         var initializer = app.Services.GetRequiredService<DatabaseInitializer>();
         await RetryUntilReachableAsync(app, async () =>
         {
-            await SqlDatabaseBootstrapper.EnsureDatabaseExistsAsync(connectionString, cancellationToken);
+            if (createIfMissing)
+            {
+                await SqlDatabaseBootstrapper.EnsureDatabaseExistsAsync(connectionString, cancellationToken);
+            }
+
             await initializer.InitializeAsync(cancellationToken);
         }, cancellationToken);
 
         await SeedAsync(app.Services, seed, cancellationToken);
     }
+
+    /// <summary>
+    /// Database:CreateIfMissing (true by default). Off in Azure: the database is provisioned with the free offer, and a
+    /// typo in its name must fail instead of creating a new, billed database on the logical server.
+    /// </summary>
+    public static bool CreateIfMissing(IConfiguration configuration) =>
+        configuration.GetValue("Database:CreateIfMissing", defaultValue: true);
 
     public static string GetConnectionString(IConfiguration configuration) =>
         configuration.GetConnectionString(ConnectionStringName) is { Length: > 0 } value

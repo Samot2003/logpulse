@@ -254,6 +254,15 @@ Settings (`Dashboard` section): `ApiBaseUrl` (required; outside Development it m
 
 Known limits: a tab closed without logging out keeps counting as a viewer for up to about 3 minutes (Blazor keeps a disconnected circuit that long in case the user comes back), and opening a page queries the API up to three times (to prerender it, when it becomes interactive, and once more when its live connection opens, to catch anything sent in between).
 
+## Releases and deployment
+
+The [CD workflow](.github/workflows/cd.yml) publishes the API, dashboard and agent images to GHCR on every merge to
+`main` (`sha-<commit>` and `latest`). On a `v*` tag it also adds semver image tags and creates a GitHub Release with the
+Windows agent as a zip, plus its SHA-256 checksum. Merges to `main` are then deployed to Azure Container Apps with Azure
+SQL Database, inside the free tiers. Each deploy needs a manual approval, signs in to Azure with OIDC (no stored
+password) and finishes with a smoke test against `/health`. Setup, cost limits and who can deploy are explained in
+[docs/deploy-azure.md](docs/deploy-azure.md).
+
 ## License
 
 [MIT](LICENSE)
