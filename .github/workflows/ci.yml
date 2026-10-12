@@ -47,6 +47,10 @@ jobs:
       - name: Build
         run: dotnet build LogPulse.sln --nologo --no-restore
 
+      # The Azure CLI is preinstalled on the runner; the template is compiled and linted, never deployed from CI.
+      - name: Validate the Azure template
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest

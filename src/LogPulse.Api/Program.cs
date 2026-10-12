@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json.Serialization;
 using LogPulse.Api.Auth;
 using LogPulse.Api.Background;
@@ -70,14 +69,12 @@ builder.Services.AddLogPulseRateLimits();
 
 // The dashboard calls /api/auth on behalf of its users and forwards their IP in X-Forwarded-For, so the auth rate
 // limit counts each user instead of the dashboard as a whole. The header is only trusted from known proxies:
-// loopback by default (the dashboard on the same machine), others listed in ForwardedHeaders:KnownProxies.
+// loopback by default (the dashboard on the same machine), others listed in the ForwardedHeaders section. Behind an
+// ingress (Azure) the chain is user -> ingress -> dashboard -> ingress -> API, hence KnownNetworks and ForwardLimit.
 builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
 {
     forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
-    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
-    {
-        forwarded.KnownProxies.Add(IPAddress.Parse(proxy));
-    }
+    ForwardedHeadersSetup.Apply(forwarded, builder.Configuration);
 });
 
 // MVC with JSON (enums as strings) and MessagePack input for ingestion only. Both enforce the batch limits while

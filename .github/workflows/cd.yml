@@ -1,0 +1,238 @@
+name: CD
+
+# Runs only for code that is already in the repository's history: a merge to main (it went through a PR with green
+# CI), a version tag, or a manual run by someone with write access. Pull requests, including those from forks, never
+# reach this workflow or its secrets.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  # Manual re-deploy of main (for example the first one, right after provisioning Azure).
+  workflow_dispatch:
+
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+# Runs for the same ref wait for each other instead of being cancelled: a deploy must never stop halfway.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+# Third-party actions are pinned to a commit SHA (a moved tag cannot change what runs here); Dependabot keeps the
+# SHA and the version comment up to date. GitHub's own actions (actions/*) use major tags, as in ci.yml.
+jobs:
+  # A version tag or a manual run must point at a commit that is already on main, so nothing that skipped the PR and
+  # its CI checks gets published.
+  guard:
+    name: Only commits on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: The commit is on main
+        run: |
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then exit 0; fi
+          echo "::error::$GITHUB_REF ($GITHUB_SHA) is not on main: nothing is published."
+          exit 1
+
+  images:
+    name: Publish ${{ matrix.image }} image
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: api
+            dockerfile: src/LogPulse.Api/Dockerfile
+          - image: dashboard
+            dockerfile: src/LogPulse.Dashboard/Dockerfile
+          - image: agent
+            dockerfile: src/LogPulse.Agent/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+
+      # GHCR image names must be lowercase; the repository owner is not.
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/logpulse-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # main: sha-<commit> + latest. Tag v1.2.3: sha-<commit> + 1.2.3 + 1.2 (no "latest": that is always main).
+      - name: Tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        id: build
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # The deploy uses this digest, not the tag: tags in GHCR can be overwritten, a digest names exactly this build.
+      - name: Save the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.name.outputs.image }}
+        run: echo "$IMAGE@$DIGEST" > "image-${{ matrix.image }}.txt"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: image-${{ matrix.image }}
+          path: image-${{ matrix.image }}.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: GitHub Release with the Windows agent
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Same command as CLAUDE.md, with the tag as the version of the executable.
+      - name: Publish the agent for Windows
+        run: dotnet publish src/LogPulse.Agent -p:PublishProfile=win-x64 -p:Version="${GITHUB_REF_NAME#v}"
+
+      - name: Publishing did not change any lock file
+        run: git diff --exit-code -- '**/packages.lock.json'
+
+      - name: Zip and checksum
+        run: |
+          set -euo pipefail
+          zip_name="logpulse-agent-${GITHUB_REF_NAME}-win-x64.zip"
+          (cd artifacts/agent-win-x64 && zip -r "../$zip_name" .)
+          (cd artifacts && sha256sum "$zip_name" > "$zip_name.sha256")
+          ls -l artifacts
+
+      # A tag with a suffix (v1.0.0-rc.1) is a pre-release.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          prerelease=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" \
+            "artifacts/logpulse-agent-${GITHUB_REF_NAME}-win-x64.zip" \
+            "artifacts/logpulse-agent-${GITHUB_REF_NAME}-win-x64.zip.sha256" \
+            --verify-tag --generate-notes $prerelease
+
+  deploy:
+    name: Deploy to Azure Container Apps
+    # Skipped until the Azure resources exist and the repository variable AZURE_RESOURCE_GROUP is set
+    # (docs/deploy-azure.md), so merging this workflow cannot deploy anything by itself.
+    if: github.ref == 'refs/heads/main' && vars.AZURE_RESOURCE_GROUP != ''
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The "production" environment requires a manual approval and only accepts main; Azure only issues a token to
+    # jobs of this repository running in it (OIDC federated credential), so there is no Azure password anywhere.
+    environment:
+      name: production
+      url: ${{ vars.DASHBOARD_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      API_APP: logpulse-api
+      DASHBOARD_APP: logpulse-dashboard
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: image-*
+          merge-multiple: true
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Only the image of the container template changes (a PATCH that leaves secrets and settings alone), so the
+      # deploy role needs read and write on the apps but not their secrets. Each app has a single container; with
+      # sidecars, select it by name instead of containers[0].
+      - name: Roll out the images of this commit
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --only-show-errors
+          roll_out() {
+            local app=$1 image=$2 id
+            id=$(az containerapp show -g "$RESOURCE_GROUP" -n "$app" --query id -o tsv)
+            az rest --method get --url "$id?api-version=2024-03-01" \
+              | jq --arg image "$image" '{properties: {template: (.properties.template | del(.revisionSuffix) | .containers[0].image = $image)}}' > "patch-$app.json"
+            az rest --method patch --url "$id?api-version=2024-03-01" --body "@patch-$app.json" --output none
+            echo "$app -> $image"
+          }
+          roll_out "$API_APP" "$(cat image-api.txt)"
+          roll_out "$DASHBOARD_APP" "$(cat image-dashboard.txt)"
+
+      # The apps scale to zero and the database auto-pauses, so the first request can take a few minutes. The new
+      # revision must be the one serving traffic (the old one keeps running until the new one is ready).
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          check() {
+            local app=$1 expected=$2
+            local fqdn
+            fqdn=$(az containerapp show -g "$RESOURCE_GROUP" -n "$app" --query properties.configuration.ingress.fqdn -o tsv)
+            for i in $(seq 1 30); do
+              mapfile -t state < <(az containerapp show -g "$RESOURCE_GROUP" -n "$app" \
+                --query "[properties.latestRevisionName, properties.latestReadyRevisionName, properties.template.containers[0].image]" -o tsv)
+              latest=${state[0]:-} ready=${state[1]:-} image=${state[2]:-}
+              if [[ -n "$latest" && "$latest" == "$ready" && "$image" == "$expected" ]] \
+                && curl --fail --silent --show-error --max-time 30 "https://$fqdn/health"; then
+                echo " <- $app ($ready) healthy"
+                return 0
+              fi
+              echo "attempt $i: $app not ready yet (latest=$latest ready=$ready)"
+              sleep 10
+            done
+            # No log dump here: Actions logs of a public repository are public. Read them with
+            # "az containerapp logs show" from your own machine.
+            echo "::error::$app did not become healthy with $expected."
+            return 1
+          }
+          check "$API_APP" "$(cat image-api.txt)"
+          check "$DASHBOARD_APP" "$(cat image-dashboard.txt)"

@@ -5,6 +5,7 @@ using LogPulse.Dashboard.Live;
 using LogPulse.Dashboard.Options;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -58,7 +59,17 @@ builder.Services.AddHttpClient<ILogPulseApi, LogPulseApiClient>(ConfigureApiClie
     .RedactLoggedHeaders(["Authorization"]);
 builder.Services.AddScoped<ILiveFeed, LiveFeed>();
 
+// Behind a TLS-terminating ingress (Azure Container Apps) the user's IP and the https scheme arrive in X-Forwarded-*
+// headers. They are only trusted from the proxies in the ForwardedHeaders section (loopback by default).
+builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
+{
+    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    ForwardedHeadersSetup.Apply(forwarded, builder.Configuration);
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
