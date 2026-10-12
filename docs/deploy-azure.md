@@ -69,7 +69,10 @@ az deployment group create -g logpulse-rg -f infra/main.bicep -o json \
   --query "properties.outputs.{azureClientId: azureClientId.value, azureTenantId: azureTenantId.value, azureSubscriptionId: azureSubscriptionId.value, apiUrl: apiUrl.value, dashboardUrl: dashboardUrl.value}"
 ```
 
-If `githubRepository` is not `Samot2003/logpulse`, pass `-p githubRepository=<owner>/<repo>`. Some university tenants
+GitHub signs the OIDC token with immutable ids in the subject (`repo:owner@ownerId/name@repoId:environment:production`),
+and `githubRepository` must match it exactly. For a fork, pass `-p githubRepository=<owner>@<ownerId>/<repo>@<repoId>`.
+Both ids come from `https://api.github.com/repos/<owner>/<repo>` (`owner.id` and `id`); a failed login also prints the
+expected subject. Some university tenants
 enforce Microsoft Entra-only authentication on Azure SQL through a policy. In that case the SQL server cannot be
 created with a SQL login, and the deployment says so.
 

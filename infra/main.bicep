@@ -11,8 +11,10 @@ param location string = resourceGroup().location
 @maxLength(12)
 param namePrefix string = 'logpulse'
 
-@description('GitHub repository allowed to deploy, as owner/name.')
-param githubRepository string = 'Samot2003/logpulse'
+// GitHub issues OIDC subjects with immutable ids ("owner@ownerId/repo@repoId"): a repository deleted and created
+// again under the same name gets a new id and cannot use this identity. The ids are public (GitHub REST API).
+@description('GitHub repository allowed to deploy, as it appears in the OIDC subject: owner@ownerId/name@repoId.')
+param githubRepository string = 'Samot2003@114223205/logpulse@1402087600'
 
 @description('Images to start with. The CD workflow replaces them with the sha-tagged ones on every deploy.')
 param apiImage string = 'ghcr.io/samot2003/logpulse-api:latest'
