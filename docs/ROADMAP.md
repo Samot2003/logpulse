@@ -176,16 +176,16 @@ Se aplica a todos los hitos, además de sus criterios propios:
 
 **Avisos de H7 pendientes:** `healthcheck` del agente y hardening del contenedor de SQL Server en compose: no aplican al despliegue elegido (Azure no usa compose; el agente no se despliega).
 
-**Aceptación:** push a `main` publica en GHCR, tag crea la Release y el deploy pasa el smoke test. Se pide confirmación antes de cada push de imágenes y de cada despliegue. ✅ Tres runs de CD publicaron las imágenes; dos despliegues reales aprobados a mano pasaron el smoke test (OIDC, rol propio, despliegue por digest). La Release con tag se comprueba con `v1.0.0` en H9, por decisión del usuario.
+**Aceptación:** push a `main` publica en GHCR, tag crea la Release y el deploy pasa el smoke test. Se pide confirmación antes de cada push de imágenes y de cada despliegue. ✅ Tres runs de CD publicaron las imágenes; dos despliegues reales aprobados a mano pasaron el smoke test (OIDC, rol propio, despliegue por digest). La Release se comprobó con el tag `v1.0.0` (H9): zip del agente `win-x64` con su SHA-256 e imágenes `1.0.0` y `1.0` en GHCR.
 
-## [ ] H9 — README y pulido
+## [x] H9 — README y pulido
 **Agentes:** portfolio-reviewer, code-reviewer
 - [x] README en inglés con diagrama Mermaid, quick start en 2 comandos, capturas, badges y sección "Design decisions". El README pasa a ser una portada y los manuales se mueven a `docs/` (`api.md`, `agent.md`, `dashboard.md`, `docker.md`).
 - [x] Capturas reales del stack de compose en `docs/images/` (con tres agentes extra y carga de CPU para que las gráficas tengan forma).
 - [x] Aviso de H7: toda la tarjeta del resumen abre el servidor (enlace extendido con `::after`; sigue habiendo un único enlace por tarjeta).
-- [ ] Repo fijado en el perfil de GitHub y enlazado desde el CV y `samot2003.github.io`.
-- [ ] Tag `v1.0.0`.
+- [x] Repo listo para fijarlo en el perfil de GitHub y enlazarlo desde el CV y `samot2003.github.io` (pasos del usuario fuera del repo, junto con el "About" y los topics).
+- [x] Tag `v1.0.0`: el CD creó la [Release](https://github.com/Samot2003/logpulse/releases/tag/v1.0.0) con el agente de Windows y publicó las imágenes `1.0.0` y `1.0`.
 
 **`/verificar 9`:** portfolio-reviewer OK y code-reviewer OK tras dos pasadas. Historial: [docs/verification/H9.md](verification/H9.md).
 
-**Aceptación:** portfolio-reviewer devuelve OK. ✅ Segunda pasada. El hito se marca cuando estén hechos el pin, los enlaces y el tag `v1.0.0`.
+**Aceptación:** portfolio-reviewer devuelve OK. ✅ Segunda pasada.
