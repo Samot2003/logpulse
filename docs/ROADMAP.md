@@ -156,11 +156,11 @@ Se aplica a todos los hitos, además de sus criterios propios:
 
 **Avisos que pasan a otros hitos:**
 - H8: fijar las acciones de terceros por SHA en el workflow de CD; valorar `healthcheck` del agente y hardening del contenedor de SQL Server si se despliega con compose.
-- H9: la tarjeta del resumen solo navega desde el nombre del servidor.
+- H9: la tarjeta del resumen solo navega desde el nombre del servidor (resuelto en H9).
 
 **Aceptación:** `docker compose up --build` muestra datos en vivo en el dashboard en menos de 2 minutos. ✅ Stack sano en 21–30 s; el ui-tester vio `docker-demo` con métricas y logs llegando en vivo y la consola limpia.
 
-## [ ] H8 — CD
+## [x] H8 — CD
 **Agentes:** devops-verifier, security-auditor
 - [x] `.github/workflows/cd.yml`: con push a `main` publica imágenes en GHCR (`sha-<commit>` + `latest`) de la API, el dashboard y el agente. Acciones de terceros fijadas por SHA (aviso de H7).
 - [x] Con tag `v*`: tags semver de las imágenes y GitHub Release con el Agent `win-x64` en zip + SHA-256 (pre-release si el tag lleva sufijo).
@@ -169,18 +169,23 @@ Se aplica a todos los hitos, además de sus criterios propios:
 - [x] Excepción de edición de scripts SQL: **se cierra al primer despliegue en Azure** (decidido con el usuario; actualizado en `CLAUDE.md`).
 - [x] La API no crea la base de datos en Azure (`Database:CreateIfMissing=false`): un nombre mal escrito no puede crear una base de datos de pago.
 - [x] `ForwardedHeaders:KnownNetworks` y `ForwardLimit` en la API y el dashboard (que ahora también lee `X-Forwarded-Proto`): detrás del ingress de Azure el rate limit de login sigue siendo por usuario y no se puede falsear.
-- [ ] Pasos manuales del usuario (`docs/deploy-azure.md`): crear el environment `production` **antes del merge**, hacer públicos los paquetes de GHCR, provisionar con Bicep, configurar secretos y variables, lanzar el primer deploy.
+- [x] Pasos manuales del usuario (`docs/deploy-azure.md`): environment `production` creado antes del merge, paquetes de GHCR públicos, Azure provisionado con Bicep en `swedencentral` (oferta gratuita de SQL confirmada), secretos y variables configurados.
+- [x] Corrección tras el primer deploy (PR #24): GitHub presenta el subject OIDC con IDs inmutables (`repo:Samot2003@114223205/logpulse@1402087600:…`); `githubRepository` usa ahora ese formato.
 
-**`/verificar 8`:** devops-verifier OK y security-auditor OK tras tres pasadas, sin bloqueantes. Historial: [docs/verification/H8.md](verification/H8.md). El hito se marca cuando se cumpla la aceptación con runs reales.
+**`/verificar 8`:** devops-verifier OK y security-auditor OK tras tres pasadas, sin bloqueantes. Historial: [docs/verification/H8.md](verification/H8.md).
 
 **Avisos de H7 pendientes:** `healthcheck` del agente y hardening del contenedor de SQL Server en compose: no aplican al despliegue elegido (Azure no usa compose; el agente no se despliega).
 
-**Aceptación:** push a `main` publica en GHCR, tag crea la Release y el deploy pasa el smoke test. Se pide confirmación antes de cada push de imágenes y de cada despliegue.
+**Aceptación:** push a `main` publica en GHCR, tag crea la Release y el deploy pasa el smoke test. Se pide confirmación antes de cada push de imágenes y de cada despliegue. ✅ Tres runs de CD publicaron las imágenes; dos despliegues reales aprobados a mano pasaron el smoke test (OIDC, rol propio, despliegue por digest). La Release con tag se comprueba con `v1.0.0` en H9, por decisión del usuario.
 
 ## [ ] H9 — README y pulido
 **Agentes:** portfolio-reviewer, code-reviewer
-- [ ] README en inglés con diagrama Mermaid, quick start en 2 comandos, capturas, badges y sección "Design decisions".
+- [x] README en inglés con diagrama Mermaid, quick start en 2 comandos, capturas, badges y sección "Design decisions". El README pasa a ser una portada y los manuales se mueven a `docs/` (`api.md`, `agent.md`, `dashboard.md`, `docker.md`).
+- [x] Capturas reales del stack de compose en `docs/images/` (con tres agentes extra y carga de CPU para que las gráficas tengan forma).
+- [x] Aviso de H7: toda la tarjeta del resumen abre el servidor (enlace extendido con `::after`; sigue habiendo un único enlace por tarjeta).
 - [ ] Repo fijado en el perfil de GitHub y enlazado desde el CV y `samot2003.github.io`.
 - [ ] Tag `v1.0.0`.
 
-**Aceptación:** portfolio-reviewer devuelve OK.
+**`/verificar 9`:** portfolio-reviewer OK y code-reviewer OK tras dos pasadas. Historial: [docs/verification/H9.md](verification/H9.md).
+
+**Aceptación:** portfolio-reviewer devuelve OK. ✅ Segunda pasada. El hito se marca cuando estén hechos el pin, los enlaces y el tag `v1.0.0`.
