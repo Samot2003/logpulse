@@ -34,3 +34,6 @@ Thumbs.db
 # Agent runtime files (local development). Not "logs/": on Windows that would also match the Logs/ source folder.
 src/LogPulse.Agent/dev-logs/
 src/LogPulse.Agent/state/
+
+# Playwright MCP snapshots and console logs
+.playwright-mcp/
