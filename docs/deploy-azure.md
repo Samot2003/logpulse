@@ -109,7 +109,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
 ```
 
 Configure the agent with `Agent:ApiBaseUrl` = the API URL, `Agent:ServerName` = `my-server` and the returned key (see
-[Run the agent](../README.md#run-the-agent)), then open the dashboard URL.
+[the agent guide](agent.md)), then open the dashboard URL.
 
 ## Known limits
 
