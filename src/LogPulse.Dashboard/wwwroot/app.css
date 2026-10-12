@@ -412,13 +412,37 @@ a:focus-visible {
 }
 
 .server-card {
+    position: relative;
     display: grid;
     gap: 0.6rem;
     align-content: start;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .server-card.is-offline {
     opacity: 0.75;
+}
+
+/* The whole card opens the server, but the name stays the only link (one tab stop, one name for screen readers). */
+.server-card .server-name::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius);
+}
+
+.server-card:hover,
+.server-card:focus-within {
+    border-color: var(--accent);
+}
+
+.server-card .server-name:focus-visible {
+    outline: none;
+}
+
+.server-card:has(.server-name:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .server-card-header {
