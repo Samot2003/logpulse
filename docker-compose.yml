@@ -15,7 +15,7 @@ x-hardening: &hardening
 
 services:
   sql:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2025-latest
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?Copy .env.example to .env and set SQL_SA_PASSWORD}
