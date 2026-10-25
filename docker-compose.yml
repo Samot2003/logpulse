@@ -113,7 +113,7 @@ services:
 
   # Writes a few realistic log lines every couple of seconds for the agent to follow.
   demo-logs:
-    image: busybox:1.36
+    image: busybox:1.38
     <<: *hardening
     volumes:
       - demo-logs:/var/log/demo
